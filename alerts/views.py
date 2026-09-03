@@ -40,6 +40,7 @@ class AlertViewSet(viewsets.ModelViewSet):
             alert=alert, old_status=old_status, new_status=alert.status,
             user=request.user, comment=serializer.validated_data.get("comment", ""),
         )
+        alert = self.get_queryset().get(pk=alert.pk)  # recharge sans le cache prefetch obsolète
         return Response(AlertDetailSerializer(alert).data)
 
     @action(detail=True, methods=["post"])
@@ -63,4 +64,5 @@ class AlertViewSet(viewsets.ModelViewSet):
             alert=alert, old_status=old_status, new_status=alert.status,
             user=request.user, comment=serializer.validated_data.get("comment", f"Transmis à {partner.name}"),
         )
+        alert = self.get_queryset().get(pk=alert.pk)  # recharge sans le cache prefetch obsolète
         return Response(AlertDetailSerializer(alert).data)
