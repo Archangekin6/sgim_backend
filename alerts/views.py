@@ -3,6 +3,7 @@ from rest_framework import viewsets, status as http_status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from partners.models import Partner
 from .models import Alert, AlertHistory
@@ -66,3 +67,30 @@ class AlertViewSet(viewsets.ModelViewSet):
         )
         alert = self.get_queryset().get(pk=alert.pk)  # recharge sans le cache prefetch obsolète
         return Response(AlertDetailSerializer(alert).data)
+    
+class HeatmapView(APIView):
+    """
+    Renvoie uniquement les positions des alertes (lat/lon) pour que le
+    frontend construise la carte de densité (§5 spec v2 : carte
+    thermique / points de chaleur, à la place du trafic temps réel).
+
+    GET /api/alerts/heatmap/?period=90 (jours, défaut 90)
+    GET /api/alerts/heatmap/?center=<id> (optionnel)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        days = int(request.query_params.get("period", 90))
+        since = timezone.now() - timezone.timedelta(days=days)
+
+        qs = Alert.objects.filter(
+            call_time__gte=since,
+            latitude__isnull=False,
+            longitude__isnull=False,
+        )
+        center_id = request.query_params.get("center")
+        if center_id:
+            qs = qs.filter(center_id=center_id)
+
+        points = list(qs.values("latitude", "longitude", "category__name", "number"))
+        return Response({"count": len(points), "points": points})

@@ -5,6 +5,8 @@ from centers.models import Center
 
 
 class User(AbstractUser):
+    first_name = models.CharField(max_length=150, blank=False)  # rendu obligatoire
+    last_name = models.CharField(max_length=150, blank=False)   # rendu obligatoire
     class Role(models.TextChoices):
         SUPERADMIN = "SUPERADMIN", "Super Administrateur"
         ADMIN = "ADMIN", "Administrateur"
