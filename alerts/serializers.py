@@ -45,17 +45,26 @@ class AlertDetailSerializer(serializers.ModelSerializer):
             "created_by", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "number", "status", "created_by", "created_at", "updated_at"]
+        extra_kwargs = {
+        "center": {"required": False},
+    }
 
     def create(self, validated_data):
         people_data = validated_data.pop("involved_people", [])
         request_user = self.context["request"].user
+
+        center = validated_data.get("center") or request_user.center
+        if not center:
+            raise serializers.ValidationError({
+                "center": "Impossible de créer une alerte : aucun centre n'est associé à ce compte. Contactez un administrateur."
+            })
+        validated_data["center"] = center
         validated_data["created_by"] = request_user
-        if not validated_data.get("center"):
-            validated_data["center"] = request_user.center
+
         alert = Alert.objects.create(**validated_data)
         for person_data in people_data:
             AlertPerson.objects.create(alert=alert, **person_data)
-        return alert
+        return alert  
 
     def update(self, instance, validated_data):
         people_data = validated_data.pop("involved_people", None)

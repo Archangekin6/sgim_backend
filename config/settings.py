@@ -163,7 +163,13 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '20/minute',   # utilisateurs non connectés (ex: tentatives de login)
+        'user': '200/minute',  # utilisateurs connectés
+    },
 }
+
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
