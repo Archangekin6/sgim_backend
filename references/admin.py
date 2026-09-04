@@ -1,8 +1,9 @@
 from django.contrib import admin
 from . import models
+from unfold.admin import ModelAdmin
 
 
-class ReferenceAdminBase(admin.ModelAdmin):
+class ReferenceAdminBase(ModelAdmin):
     list_display = ("name", "code", "order", "is_active")
     list_filter = ("is_active",)
     search_fields = ("name", "code")

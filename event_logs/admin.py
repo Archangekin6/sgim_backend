@@ -1,9 +1,10 @@
 from django.contrib import admin
 from .models import EventLog
+from unfold.admin import ModelAdmin
 
 
 @admin.register(EventLog)
-class EventLogAdmin(admin.ModelAdmin):
+class EventLogAdmin(ModelAdmin):
     list_display = ("timestamp", "action_type", "user", "description")
     list_filter = ("action_type",)
     search_fields = ("description",)

@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+from django.urls import reverse_lazy
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -37,6 +38,57 @@ INSTALLED_APPS = [
     'reports',
     'meetings',
 ]
+
+UNFOLD = {
+    "SITE_TITLE": "SGIM Admin",
+    "SITE_HEADER": "SGIM — MRCC Abidjan",
+    "SITE_SUBHEADER": "Système de Gestion des Incidents Maritimes",
+    "SITE_SYMBOL": "anchor",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "COLORS": {
+        "primary": {
+            "50": "240 249 255", "100": "224 242 254", "200": "186 230 253",
+            "300": "125 211 252", "400": "56 189 248", "500": "14 165 233",
+            "600": "2 132 199", "700": "3 105 161", "800": "7 89 133",
+            "900": "12 74 110", "950": "8 47 73",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Opérations",
+                "separator": True,
+                "items": [
+                    {"title": "Alertes", "icon": "warning", "link": reverse_lazy("admin:alerts_alert_changelist")},
+                    {"title": "Personnes / Victimes", "icon": "groups", "link": reverse_lazy("admin:persons_person_changelist")},
+                    {"title": "Moyens de secours", "icon": "directions_boat", "link": reverse_lazy("admin:sar_means_changelist")},
+                    {"title": "Rapports journaliers", "icon": "summarize", "link": reverse_lazy("admin:reports_dailyreport_changelist")},
+                    {"title": "Réunions", "icon": "groups_2", "link": reverse_lazy("admin:meetings_meeting_changelist")},
+                ],
+            },
+            {
+                "title": "Référentiels",
+                "separator": True,
+                "items": [
+                    {"title": "Centres", "icon": "location_city", "link": reverse_lazy("admin:centers_center_changelist")},
+                    {"title": "Navires", "icon": "sailing", "link": reverse_lazy("admin:vessels_vessel_changelist")},
+                    {"title": "Partenaires", "icon": "handshake", "link": reverse_lazy("admin:partners_partner_changelist")},
+                ],
+            },
+            {
+                "title": "Administration",
+                "separator": True,
+                "items": [
+                    {"title": "Utilisateurs", "icon": "manage_accounts", "link": reverse_lazy("admin:accounts_user_changelist")},
+                    {"title": "Journal des événements", "icon": "history", "link": reverse_lazy("admin:event_logs_eventlog_changelist")},
+                ],
+            },
+        ],
+    },
+}
 
 AUTH_USER_MODEL = "accounts.User"
 
