@@ -89,6 +89,7 @@ UNFOLD = {
                 "items": [
                     {"title": "Utilisateurs", "icon": "manage_accounts", "link": reverse_lazy("admin:accounts_user_changelist")},
                     {"title": "Journal des événements", "icon": "history", "link": reverse_lazy("admin:event_logs_eventlog_changelist")},
+                    {"title": "Demandes mot de passe", "icon": "lock_reset", "link": reverse_lazy("admin:accounts_passwordresetrequest_changelist")},
                 ],
             },
         ],
