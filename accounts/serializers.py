@@ -1,6 +1,7 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from .models import User
+from .models import PasswordResetRequest
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -40,4 +41,41 @@ class MeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "first_name", "last_name", "role", "team", "center", "center_name"]
+        fields = ["id", "username", "first_name", "last_name", "role", "team", "center", "center_name"]        
+
+
+class PasswordResetRequestCreateSerializer(serializers.Serializer):
+    """Utilisé par l'utilisateur qui a oublié son mot de passe (pas besoin d'être connecté)."""
+    username = serializers.CharField()
+    note = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_username(self, value):
+        if not User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Aucun compte avec cet identifiant.")
+        return value
+
+
+class PasswordResetRequestSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    resolved_by_username = serializers.CharField(source="resolved_by.username", read_only=True, default=None)
+
+    class Meta:
+        model = PasswordResetRequest
+        fields = [
+            "id", "user", "username", "note", "status",
+            "requested_at", "resolved_by", "resolved_by_username", "resolved_at",
+        ]
+        read_only_fields = fields
+
+
+class ResolvePasswordResetSerializer(serializers.Serializer):
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+
+
+class BulkResolveItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+
+
+class BulkResolveSerializer(serializers.Serializer):
+    items = BulkResolveItemSerializer(many=True)

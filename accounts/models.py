@@ -40,3 +40,23 @@ class User(AbstractUser):
         elif self.role == self.Role.ADMIN:
             self.is_staff = True
         super().save(*args, **kwargs)
+        
+class PasswordResetRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "En attente"
+        RESOLVED = "RESOLVED", "Traitée"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_requests")
+    note = models.CharField(max_length=255, blank=True, help_text="Message optionnel de l'utilisateur")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        verbose_name = "Demande de réinitialisation de mot de passe"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_status_display()}"        

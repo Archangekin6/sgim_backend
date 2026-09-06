@@ -206,4 +206,17 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API du Système de Gestion des Incidents Maritimes - MRCC Abidjan / MRSC San Pedro',
     'VERSION': '2.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {'name': 'alerts', 'description': 'ALERTES — Le module central : créer un signalement, le qualifier, le transmettre, le clôturer.'},
+        {'name': 'users', 'description': 'UTILISATEURS — Gestion des comptes (Super Admin) + endpoint /me pour connaître le compte connecté.'},
+        {'name': 'centers', 'description': 'CENTRES — MRCC Abidjan et MRSC San Pedro.'},
+        {'name': 'references', 'description': 'RÉFÉRENTIELS — Toutes les listes déroulantes (catégories, priorités, types de navire...).'},
+        {'name': 'vessels', 'description': 'NAVIRES — Fiches des bateaux concernés par une alerte.'},
+        {'name': 'partners', 'description': 'PARTENAIRES — Organismes externes recevant une alerte transmise. Réservé Admin/Super Admin.'},
+        {'name': 'persons', 'description': 'PERSONNES / VICTIMES — Personnes impliquées dans une alerte.'},
+        {'name': 'sar', 'description': 'MOYENS DE SECOURS (Search And Rescue) — Vedettes, hélicoptères, et leur engagement sur une alerte.'},
+        {'name': 'event-logs', 'description': 'JOURNAL DES ÉVÉNEMENTS — Historique automatique des actions. Lecture seule, Admin/Super Admin.'},
+        {'name': 'reports', 'description': 'RAPPORTS — Rapport de fin de journée + tableau de bord.'},
+        {'name': 'meetings', 'description': 'RÉUNIONS — Comptes-rendus avec pièce jointe PDF.'},
+    ],
 }
