@@ -40,6 +40,19 @@ class User(AbstractUser):
         elif self.role == self.Role.ADMIN:
             self.is_staff = True
         super().save(*args, **kwargs)
+        if self.role == self.Role.ADMIN:
+            self._assign_admin_permissions()
+
+    def _assign_admin_permissions(self):
+        """Donne à un compte Admin toutes les permissions sauf la gestion
+        des comptes utilisateurs, réservée au Super Administrateur."""
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        permissions = Permission.objects.exclude(
+            content_type=ContentType.objects.get_for_model(User)
+        )
+        self.user_permissions.set(permissions)
         
 class PasswordResetRequest(models.Model):
     class Status(models.TextChoices):
