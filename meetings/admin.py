@@ -14,13 +14,13 @@ class MeetingAdmin(ModelAdmin):
     readonly_fields = ("title", "meeting_date", "minutes", "attendance_sheet", "created_by", "created_at")
 
     def has_add_permission(self, request):
-        return False  # créée uniquement par l'agent via l'API
+        return False
 
     def has_change_permission(self, request, obj=None):
-        return False  # consultation uniquement
+        return False
 
     def fiche_link(self, obj):
         if obj.attendance_sheet:
-            return format_html('<a href="{}" target="_blank">📎 Voir la fiche de présence</a>', obj.attendance_sheet.url)
+            return format_html('<a href="{}" target="_blank">Voir la fiche de présence</a>', obj.attendance_sheet.url)
         return "—"
     fiche_link.short_description = "Fiche de présence"

@@ -22,10 +22,10 @@ class DailyReportAdmin(ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        return False  # créé uniquement par l'agent via l'API
+        return False
 
     def has_change_permission(self, request, obj=None):
-        return False  # lecture seule : Django affiche alors une fiche de consultation, pas un formulaire
+        return False
 
     def badge_statut(self, obj):
         color = "#1E7A4C" if obj.is_validated else "#B5651D"

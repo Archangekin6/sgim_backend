@@ -51,7 +51,7 @@ class AlertAdmin(ModelAdmin):
 
     def print_link(self, obj):
         url = reverse("admin:alerts_alert_print", args=[obj.pk])
-        return format_html('<a class="button" href="{}" target="_blank">🖨️ Imprimer</a>', url)
+        return format_html('<a class="button" href="{}" target="_blank">Imprimer</a>', url)
     print_link.short_description = "Impression"
 
     def get_urls(self):
@@ -70,7 +70,7 @@ class AlertAdmin(ModelAdmin):
         alerts = Alert.objects.filter(pk__in=ids)
         return render(request, "admin/alerts/print_alerts.html", {"alerts": alerts, "title": "Alertes sélectionnées"})
 
-    @admin.action(description="🖨️ Imprimer les alertes sélectionnées")
+    @admin.action(description="Imprimer les alertes sélectionnées")
     def imprimer_selection(self, request, queryset):
         ids = ",".join(str(a.pk) for a in queryset)
         return redirect(reverse("admin:alerts_alert_print_selection") + f"?ids={ids}")
