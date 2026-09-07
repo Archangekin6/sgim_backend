@@ -2,7 +2,9 @@ import uuid
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from centers.models import Center
-
+from .models import PasswordResetRequest
+from .permissions import IsSuperAdmin
+from .serializers import PasswordResetRequestSerializer
 
 class User(AbstractUser):
     first_name = models.CharField(max_length=150, blank=False)  # rendu obligatoire
@@ -60,3 +62,4 @@ class PasswordResetRequest(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.get_status_display()}"        
+    

@@ -1,17 +1,13 @@
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from .models import User
-from unfold.admin import ModelAdmin
-from .models import PasswordResetRequest
-
 from django import forms
-from django.contrib import messages
+from django.contrib import admin, messages
+from django.contrib.auth.admin import UserAdmin
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from unfold.admin import ModelAdmin
 
-from .models import PasswordResetRequest
+from .models import PasswordResetRequest, User
 
 
 @admin.register(User)
@@ -20,13 +16,8 @@ class CustomUserAdmin(UserAdmin, ModelAdmin):
     list_filter = ("role", "team", "center", "is_active")
     fieldsets = UserAdmin.fieldsets + (
         ("SGIM", {"fields": ("role", "team", "center", "phone")}),
-    )   
+    )
 
-@admin.register(PasswordResetRequest)
-class PasswordResetRequestAdmin(ModelAdmin):
-    list_display = ("user", "status", "requested_at", "resolved_by", "resolved_at")
-    list_filter = ("status",)
-    
 
 class ResolvePasswordForm(forms.Form):
     new_password = forms.CharField(label="Nouveau mot de passe", widget=forms.PasswordInput)
@@ -61,7 +52,7 @@ class PasswordResetRequestAdmin(ModelAdmin):
     def resolve_view(self, request, pk):
         reset_request = get_object_or_404(PasswordResetRequest, pk=pk)
 
-        if not (request.user.is_superuser or getattr(request.user, "role", None) in ("ADMIN", "SUPERADMIN")):
+        if not (request.user.is_superuser or getattr(request.user, "role", None) == "SUPERADMIN"):
             messages.error(request, "Vous n'avez pas le droit de traiter cette demande.")
             return redirect("admin:accounts_passwordresetrequest_changelist")
 
