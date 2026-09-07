@@ -14,9 +14,29 @@ from .models import PasswordResetRequest, User
 class CustomUserAdmin(UserAdmin, ModelAdmin):
     list_display = ("username", "get_full_name", "role", "team", "center", "is_active")
     list_filter = ("role", "team", "center", "is_active")
-    fieldsets = UserAdmin.fieldsets + (
-        ("SGIM", {"fields": ("role", "team", "center", "phone")}),
+    search_fields = ("username", "first_name", "last_name", "email")
+    ordering = ("username",)
+
+    fieldsets = (
+        (None, {"fields": ("username", "password")}),
+        ("Informations personnelles", {"fields": ("first_name", "last_name", "email", "phone")}),
+        ("Rôle SGIM", {"fields": ("role", "team", "center")}),
+        ("État du compte", {"fields": ("is_active",)}),
+        ("Dates importantes", {"fields": ("last_login", "date_joined")}),
     )
+
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": (
+                "username", "password1", "password2",
+                "first_name", "last_name", "email",
+                "role", "team", "center", "phone", "is_active",
+            ),
+        }),
+    )
+
+    readonly_fields = ("last_login", "date_joined")
 
 
 class ResolvePasswordForm(forms.Form):

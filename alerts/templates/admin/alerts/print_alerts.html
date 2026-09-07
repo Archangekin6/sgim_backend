@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %} {% block extrahead %}
+<style>
+  @media print {
+    #header,
+    .submit-row,
+    .no-print,
+    nav {
+      display: none !important;
+    }
+  }
+  .alert-card {
+    border: 1px solid #ccc;
+    padding: 18px;
+    margin-bottom: 22px;
+    border-radius: 8px;
+  }
+  .alert-card h2 {
+    margin-top: 0;
+  }
+  table.meta td {
+    padding: 5px 12px;
+    vertical-align: top;
+  }
+  table.meta td:first-child {
+    font-weight: bold;
+    width: 220px;
+  }
+</style>
+{% endblock %} {% block content %}
+<button class="no-print button" onclick="window.print()">
+  🖨️ Imprimer cette page
+</button>
+{% for alert in alerts %}
+<div class="alert-card">
+  <h2>Alerte {{ alert.number }}</h2>
+  <table class="meta">
+    <tr>
+      <td>Centre</td>
+      <td>{{ alert.center }}</td>
+    </tr>
+    <tr>
+      <td>Catégorie</td>
+      <td>{{ alert.category }}</td>
+    </tr>
+    <tr>
+      <td>Priorité</td>
+      <td>{{ alert.priority|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td>Gravité</td>
+      <td>{{ alert.severity|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td>Statut</td>
+      <td>{{ alert.get_status_display }}</td>
+    </tr>
+    <tr>
+      <td>Date de l'appel</td>
+      <td>{{ alert.call_time }}</td>
+    </tr>
+    <tr>
+      <td>Signature opérateur</td>
+      <td>{{ alert.operator_signature }}</td>
+    </tr>
+    <tr>
+      <td>Description</td>
+      <td>{{ alert.description }}</td>
+    </tr>
+  </table>
+</div>
+{% endfor %} {% endblock %}
