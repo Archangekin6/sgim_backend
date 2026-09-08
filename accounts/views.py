@@ -4,6 +4,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from .models import User
 from .permissions import IsSuperAdmin
 from .serializers import MeSerializer, UserSerializer
@@ -101,3 +104,23 @@ class PasswordResetRequestViewSet(viewsets.ReadOnlyModelViewSet):
             results.append({"id": str(item["id"]), "username": reset_request.user.username, "status": "resolved"})
 
         return Response({"results": results})
+
+
+class LogoutView(APIView):
+    """
+    Déconnexion : invalide le refresh token pour qu'il ne puisse plus
+    être utilisé pour obtenir un nouvel access token.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except (KeyError, TokenError):
+            return Response(
+                {"detail": "Refresh token manquant ou invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"detail": "Déconnexion réussie."}, status=status.HTTP_205_RESET_CONTENT)

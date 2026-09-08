@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import DailyReport
 from .serializers import DailyReportSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 from django.db.models import Count
 from django.utils import timezone
@@ -98,3 +100,23 @@ class DashboardView(APIView):
             "by_category": by_category,
             "by_status": by_status,
         })
+        
+
+class LogoutView(APIView):
+    """
+    Déconnexion : invalide le refresh token pour qu'il ne puisse plus
+    être utilisé pour obtenir un nouvel access token.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except (KeyError, TokenError):
+            return Response(
+                {"detail": "Refresh token manquant ou invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"detail": "Déconnexion réussie."}, status=status.HTTP_205_RESET_CONTENT)

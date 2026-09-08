@@ -1,4 +1,5 @@
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from accounts.views import LogoutView
 
 from django.contrib import admin
 from django.urls import path, include
@@ -32,6 +33,7 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     path('api/auth/password-reset-request/', PasswordResetRequestCreateView.as_view(), name='password-reset-request'),
+    path('api/auth/logout/', LogoutView.as_view(), name='logout'),
 ]
 
 if settings.DEBUG:
