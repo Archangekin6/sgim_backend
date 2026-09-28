@@ -34,6 +34,8 @@ urlpatterns = [
     
     path('api/auth/password-reset-request/', PasswordResetRequestCreateView.as_view(), name='password-reset-request'),
     path('api/auth/logout/', LogoutView.as_view(), name='logout'),
+    
+    path('api/dashboard/', include('reports.dashboard_urls')),
 ]
 
 if settings.DEBUG:

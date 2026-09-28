@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from .filters import AlertFilter
 
 from partners.models import Partner
 from .models import Alert, AlertHistory
@@ -18,9 +19,9 @@ class AlertViewSet(viewsets.ModelViewSet):
         "center", "channel", "category", "priority", "severity", "vessel", "created_by", "notified_partner"
     ).prefetch_related("involved_people", "history").all()
     permission_classes = [IsAuthenticated]
-    filterset_fields = ["status", "center", "category", "priority"]
+    filterset_class = AlertFilter
+    ordering_fields = ["call_time", "created_at", "status", "number", "priority__level"]
     search_fields = ["number", "description", "operator_signature"]
-    ordering_fields = ["call_time", "created_at"]
 
     def get_serializer_class(self):
         if self.action == "list":

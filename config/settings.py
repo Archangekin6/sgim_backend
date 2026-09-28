@@ -178,6 +178,7 @@ REST_FRAMEWORK = {
         'anon': '20/minute',   # utilisateurs non connectés (ex: tentatives de login)
         'user': '200/minute',  # utilisateurs connectés
     },
+    'ORDERING_PARAM': 'sort',
 }
 
 
