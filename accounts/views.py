@@ -4,8 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
+from rest_framework import serializers
+
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 
 from .models import User
 from .permissions import IsSuperAdmin
@@ -45,7 +49,18 @@ class PasswordResetRequestCreateView(APIView):
     (il ne peut, par définition, pas se connecter).
     """
     permission_classes = [AllowAny]
-
+    
+    @extend_schema(
+        tags=["auth"],
+        summary="Signaler un mot de passe oublié",
+        description="Endpoint public (sans token). Crée une demande que le Super Admin traitera.",
+        request=PasswordResetRequestCreateSerializer,
+        responses={
+            201: OpenApiResponse(description="Demande enregistrée."),
+            400: OpenApiResponse(description="Identifiant inconnu."),
+        },
+    )
+    
     def post(self, request):
         serializer = PasswordResetRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -64,6 +79,12 @@ class PasswordResetRequestViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsSuperAdmin]
     filterset_fields = ["status", "user"]
 
+
+    @extend_schema(
+        summary="Traiter une demande",
+        request=ResolvePasswordResetSerializer,
+        responses=PasswordResetRequestSerializer,
+    )
     @action(detail=True, methods=["post"])
     def resolve(self, request, pk=None):
         """Traite UNE demande."""
@@ -81,6 +102,12 @@ class PasswordResetRequestViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(PasswordResetRequestSerializer(reset_request).data)
 
+    
+    @extend_schema(
+        summary="Traiter plusieurs demandes en une fois",
+        request=BulkResolveSerializer,
+        responses={200: OpenApiResponse(description="Résultat pour chaque demande (resolved ou introuvable).")},
+    )
     @action(detail=False, methods=["post"])
     def bulk_resolve(self, request):
         """Traite PLUSIEURS demandes en un seul appel (le cumul demandé)."""
@@ -105,13 +132,23 @@ class PasswordResetRequestViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response({"results": results})
 
-
 class LogoutView(APIView):
     """
     Déconnexion : invalide le refresh token pour qu'il ne puisse plus
     être utilisé pour obtenir un nouvel access token.
     """
     permission_classes = [IsAuthenticated]
+    
+    @extend_schema(
+        tags=["auth"],
+        summary="Déconnexion",
+        description="Invalide le refresh token. Le front doit aussi supprimer les tokens stockés localement.",
+        request=inline_serializer(name="LogoutRequest", fields={"refresh": serializers.CharField()}),
+        responses={
+            205: OpenApiResponse(description="Déconnexion réussie."),
+            400: OpenApiResponse(description="Refresh token manquant ou invalide."),
+        },
+    )
 
     def post(self, request):
         try:

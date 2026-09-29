@@ -16,6 +16,10 @@ from rest_framework.views import APIView
 from alerts.models import Alert
 from sar.models import MeansEngagement
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers
+
 
 
 class DailyReportViewSet(viewsets.ModelViewSet):
@@ -67,7 +71,29 @@ class DashboardView(APIView):
     GET /api/reports/dashboard/?center=<id> (optionnel)
     """
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["reports"],
+        summary="Tableau de bord global",
+        description="Indicateurs agrégés sur alertes, coordinations et moyens, période réglable.",
+        parameters=[
+            OpenApiParameter("period", OpenApiTypes.INT, description="Nombre de jours en arrière (défaut 30)."),
+            OpenApiParameter("center", OpenApiTypes.STR, description="ID du centre pour filtrer."),
+        ],
+        responses=inline_serializer(
+            name="GlobalDashboardResponse",
+            fields={
+                "period_days": serializers.IntegerField(),
+                "alerts_total": serializers.IntegerField(),
+                "alerts_new": serializers.IntegerField(),
+                "alerts_qualified": serializers.IntegerField(),
+                "coordinations_count": serializers.IntegerField(),
+                "rescues_count": serializers.IntegerField(),
+                "calls_received_count": serializers.IntegerField(),
+                "by_category": serializers.ListField(),
+                "by_status": serializers.ListField(),
+            },
+        ),
+    )
     def get(self, request):
         days = int(request.query_params.get("period", 30))
         since = timezone.now() - timezone.timedelta(days=days)

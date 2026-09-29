@@ -12,6 +12,20 @@ from sar.models import Means
 
 from .models import DailyReport
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+
+from .dashboard_serializers import (
+    AlertsTodaySerializer,
+    IncidentsOpenSerializer,
+    PersonnelAvailableSerializer,
+    StatsByRoleSerializer,
+)
+
+CENTER_PARAM = OpenApiParameter(
+    "center", OpenApiTypes.INT, description="ID du centre (Admin et Super Admin seulement). Un Opérateur voit toujours son centre."
+)
+
 OPEN_STATUSES = [Alert.Status.NEW, Alert.Status.QUALIFIED, Alert.Status.TRANSMITTED]
 
 
@@ -41,7 +55,8 @@ def status_breakdown(qs):
 class AlertsTodayView(APIView):
     """GET /api/dashboard/alerts-today/ : alertes reçues aujourd'hui."""
     permission_classes = [IsAuthenticated]
-
+    
+    @extend_schema(tags=["dashboard"], summary="Alertes du jour", parameters=[CENTER_PARAM], responses=AlertsTodaySerializer)
     def get(self, request):
         today = timezone.localdate()
         start, end = day_bounds(today)
@@ -59,6 +74,7 @@ class IncidentsOpenView(APIView):
     (incident = alerte depuis la fusion de la v2)."""
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=["dashboard"], summary="Incidents ouverts", parameters=[CENTER_PARAM], responses=IncidentsOpenSerializer)
     def get(self, request):
         qs = scoped_alerts(request).filter(status__in=OPEN_STATUSES)
         return Response({
@@ -73,6 +89,7 @@ class PersonnelAvailableView(APIView):
     """GET /api/dashboard/personnel-available/ : disponibilité des moyens de secours."""
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=["dashboard"], summary="Personnel disponible", parameters=[CENTER_PARAM], responses=PersonnelAvailableSerializer)
     def get(self, request):
         means = Means.objects.all()
         center_id = request.query_params.get("center")
@@ -99,7 +116,13 @@ class PersonnelAvailableView(APIView):
 class StatsByRoleView(APIView):
     """GET /api/dashboard/stats/by-role/ : contenu adapté au rôle de l'utilisateur connecté."""
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["dashboard"],
+        summary="Statistiques selon le rôle",
+        description="Opérateur : données de son centre. Admin : données globales. Super Admin : données globales et indicateurs de gestion des comptes.",
+        parameters=[CENTER_PARAM],
+        responses=StatsByRoleSerializer,
+    )
     def get(self, request):
         user = request.user
         today = timezone.localdate()

@@ -1,0 +1,5681 @@
+openapi: 3.0.3
+info:
+  title: SGIM API
+  version: 2.0.0
+  description: |-
+    API du Système de Gestion des Incidents Maritimes (MRCC Abidjan / MRSC San Pedro).
+
+    **Authentification** : `POST /api/auth/token/` renvoie `access` et `refresh`. Envoyer `Authorization: Bearer <access>` sur chaque requête. L'access expire au bout de 8 h : `POST /api/auth/token/refresh/`.
+
+    **Listes déroulantes** : envoyer l'UUID de l'entrée choisie, jamais son libellé. Les options se lisent sous `/api/references/...`.
+
+    **Listes** : réponse paginée `{count, next, previous, results}` (25 par page). Tri avec `sort` (ex : `-created_at`), recherche avec `search`.
+
+    **Erreurs** : 400 données invalides, 401 non connecté, 403 rôle insuffisant, 404 introuvable.
+paths:
+  /api/alerts/:
+    get:
+      operationId: alerts_list
+      description: 'Liste paginée. Filtres : status, priority, category, center, channel,
+        vessel, call_time_after, call_time_before. Recherche : search. Tri : sort.'
+      summary: Lister les alertes
+      parameters:
+      - in: query
+        name: call_time_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: call_time_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: 'UUID, code (ex : surete) ou nom de la catégorie.'
+      - in: query
+        name: center
+        schema:
+          type: integer
+      - in: query
+        name: channel
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - in: query
+        name: priority
+        schema:
+          type: string
+        description: 'UUID, code (ex : elevee) ou nom de la priorité.'
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: NEW, QUALIFIED, TRANSMITTED, CLOSED, ou active (tout sauf CLOSED).
+          Valeurs multiples séparées par des virgules.
+      - in: query
+        name: vessel
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlertListList'
+          description: ''
+    post:
+      operationId: alerts_create
+      description: Formulaire « Nouvelle Alerte ». Les champs channel, category, priority,
+        severity attendent l'UUID de la liste déroulante. Le numéro, le statut NEW
+        et le créateur sont générés par le serveur. Si `center` est omis, le centre
+        du compte connecté est utilisé.
+      summary: Créer une alerte
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertDetailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertDetailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertDetailRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+          description: ''
+  /api/alerts/{id}/:
+    get:
+      operationId: alerts_retrieve
+      summary: Détail d'une alerte (personnes et historique inclus)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+          description: ''
+    put:
+      operationId: alerts_update
+      summary: Remplacer une alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertDetailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertDetailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertDetailRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+          description: ''
+    patch:
+      operationId: alerts_partial_update
+      summary: Modifier partiellement une alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAlertDetailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAlertDetailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAlertDetailRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+          description: ''
+    delete:
+      operationId: alerts_destroy
+      summary: Supprimer une alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/alerts/{id}/change_status/:
+    post:
+      operationId: alerts_change_status_create
+      description: Fait avancer l'alerte et enregistre la transition dans l'historique.
+      summary: Changer le statut d'une alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangeStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangeStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+          description: ''
+  /api/alerts/{id}/transmit/:
+    post:
+      operationId: alerts_transmit_create
+      description: Enregistre le partenaire notifié et l'heure exacte de transmission
+        (valeur légale).
+      summary: Transmettre une alerte à un partenaire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransmitRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransmitRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransmitRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+          description: ''
+        '400':
+          description: Partenaire inconnu.
+  /api/alerts/heatmap/:
+    get:
+      operationId: alerts_heatmap_retrieve
+      description: Renvoie latitude/longitude des alertes situées géographiquement,
+        pour construire une carte thermique côté frontend.
+      summary: Positions des alertes (carte de densité)
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: string
+        description: ID du centre pour filtrer.
+      - in: query
+        name: period
+        schema:
+          type: integer
+        description: Nombre de jours en arrière (défaut 90).
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatmapResponse'
+          description: ''
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      description: Invalide le refresh token. Le front doit aussi supprimer les tokens
+        stockés localement.
+      summary: Déconnexion
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '205':
+          description: Déconnexion réussie.
+        '400':
+          description: Refresh token manquant ou invalide.
+  /api/auth/password-reset-request/:
+    post:
+      operationId: auth_password_reset_request_create
+      description: Endpoint public (sans token). Crée une demande que le Super Admin
+        traitera.
+      summary: Signaler un mot de passe oublié
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          description: Demande enregistrée.
+        '400':
+          description: Identifiant inconnu.
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/centers/:
+    get:
+      operationId: centers_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - centers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCenterList'
+          description: ''
+    post:
+      operationId: centers_create
+      tags:
+      - centers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CenterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CenterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CenterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Center'
+          description: ''
+  /api/centers/{id}/:
+    get:
+      operationId: centers_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) center.
+        required: true
+      tags:
+      - centers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Center'
+          description: ''
+    put:
+      operationId: centers_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) center.
+        required: true
+      tags:
+      - centers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CenterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CenterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CenterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Center'
+          description: ''
+    patch:
+      operationId: centers_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) center.
+        required: true
+      tags:
+      - centers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCenterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCenterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCenterRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Center'
+          description: ''
+    delete:
+      operationId: centers_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) center.
+        required: true
+      tags:
+      - centers
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/dashboard/alerts-today/:
+    get:
+      operationId: dashboard_alerts_today_retrieve
+      description: 'GET /api/dashboard/alerts-today/ : alertes reçues aujourd''hui.'
+      summary: Alertes du jour
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: integer
+        description: ID du centre (Admin et Super Admin seulement). Un Opérateur voit
+          toujours son centre.
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertsToday'
+          description: ''
+  /api/dashboard/incidents-open/:
+    get:
+      operationId: dashboard_incidents_open_retrieve
+      description: |-
+        GET /api/dashboard/incidents-open/ : alertes non clôturées
+        (incident = alerte depuis la fusion de la v2).
+      summary: Incidents ouverts
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: integer
+        description: ID du centre (Admin et Super Admin seulement). Un Opérateur voit
+          toujours son centre.
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentsOpen'
+          description: ''
+  /api/dashboard/personnel-available/:
+    get:
+      operationId: dashboard_personnel_available_retrieve
+      description: 'GET /api/dashboard/personnel-available/ : disponibilité des moyens
+        de secours.'
+      summary: Personnel disponible
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: integer
+        description: ID du centre (Admin et Super Admin seulement). Un Opérateur voit
+          toujours son centre.
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonnelAvailable'
+          description: ''
+  /api/dashboard/stats/by-role/:
+    get:
+      operationId: dashboard_stats_by_role_retrieve
+      description: 'Opérateur : données de son centre. Admin : données globales. Super
+        Admin : données globales et indicateurs de gestion des comptes.'
+      summary: Statistiques selon le rôle
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: integer
+        description: ID du centre (Admin et Super Admin seulement). Un Opérateur voit
+          toujours son centre.
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsByRole'
+          description: ''
+  /api/event-logs/:
+    get:
+      operationId: event_logs_list
+      description: Lecture seule, réservé aux Admin/Super Admin (§5 spec v2).
+      parameters:
+      - in: query
+        name: action_type
+        schema:
+          type: string
+          enum:
+          - CREATE
+          - ENGAGEMENT
+          - LOGIN
+          - STATUS_CHANGE
+          - TRANSMIT
+          - UPDATE
+        description: |-
+          * `CREATE` - Création
+          * `UPDATE` - Modification
+          * `STATUS_CHANGE` - Changement de statut
+          * `TRANSMIT` - Transmission partenaire
+          * `ENGAGEMENT` - Engagement de moyen
+          * `LOGIN` - Connexion
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: user
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - event-logs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEventLogList'
+          description: ''
+  /api/event-logs/{id}/:
+    get:
+      operationId: event_logs_retrieve
+      description: Lecture seule, réservé aux Admin/Super Admin (§5 spec v2).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) event log.
+        required: true
+      tags:
+      - event-logs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventLog'
+          description: ''
+  /api/meetings/:
+    get:
+      operationId: meetings_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - meetings
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMeetingList'
+          description: ''
+    post:
+      operationId: meetings_create
+      tags:
+      - meetings
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeetingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeetingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+          description: ''
+  /api/meetings/{id}/:
+    get:
+      operationId: meetings_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) meeting.
+        required: true
+      tags:
+      - meetings
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+          description: ''
+    put:
+      operationId: meetings_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) meeting.
+        required: true
+      tags:
+      - meetings
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeetingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeetingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+          description: ''
+    patch:
+      operationId: meetings_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) meeting.
+        required: true
+      tags:
+      - meetings
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeetingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeetingRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+          description: ''
+    delete:
+      operationId: meetings_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) meeting.
+        required: true
+      tags:
+      - meetings
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/partners/:
+    get:
+      operationId: partners_list
+      description: Réservé aux Admin/Super Admin - retiré de l'interface opérateur
+        (§5 spec v2).
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - in: query
+        name: partner_type
+        schema:
+          type: string
+          format: uuid
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - partners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartnerList'
+          description: ''
+    post:
+      operationId: partners_create
+      description: Réservé aux Admin/Super Admin - retiré de l'interface opérateur
+        (§5 spec v2).
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+  /api/partners/{id}/:
+    get:
+      operationId: partners_retrieve
+      description: Réservé aux Admin/Super Admin - retiré de l'interface opérateur
+        (§5 spec v2).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner.
+        required: true
+      tags:
+      - partners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+    put:
+      operationId: partners_update
+      description: Réservé aux Admin/Super Admin - retiré de l'interface opérateur
+        (§5 spec v2).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner.
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+    patch:
+      operationId: partners_partial_update
+      description: Réservé aux Admin/Super Admin - retiré de l'interface opérateur
+        (§5 spec v2).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner.
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+    delete:
+      operationId: partners_destroy
+      description: Réservé aux Admin/Super Admin - retiré de l'interface opérateur
+        (§5 spec v2).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner.
+        required: true
+      tags:
+      - partners
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/persons/:
+    get:
+      operationId: persons_list
+      parameters:
+      - in: query
+        name: alert
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          format: uuid
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - persons
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonList'
+          description: ''
+    post:
+      operationId: persons_create
+      tags:
+      - persons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+          description: ''
+  /api/persons/{id}/:
+    get:
+      operationId: persons_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person.
+        required: true
+      tags:
+      - persons
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+          description: ''
+    put:
+      operationId: persons_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person.
+        required: true
+      tags:
+      - persons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+          description: ''
+    patch:
+      operationId: persons_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person.
+        required: true
+      tags:
+      - persons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+          description: ''
+    delete:
+      operationId: persons_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person.
+        required: true
+      tags:
+      - persons
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/references/alert-sources/:
+    get:
+      operationId: references_alert_sources_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlertSourceList'
+          description: ''
+  /api/references/alert-sources/{id}/:
+    get:
+      operationId: references_alert_sources_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert source.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSource'
+          description: ''
+  /api/references/incident-categories/:
+    get:
+      operationId: references_incident_categories_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIncidentCategoryList'
+          description: ''
+  /api/references/incident-categories/{id}/:
+    get:
+      operationId: references_incident_categories_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) incident category.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentCategory'
+          description: ''
+  /api/references/means-categories/:
+    get:
+      operationId: references_means_categories_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMeansCategoryList'
+          description: ''
+  /api/references/means-categories/{id}/:
+    get:
+      operationId: references_means_categories_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means category.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansCategory'
+          description: ''
+  /api/references/means-types/:
+    get:
+      operationId: references_means_types_list
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMeansTypeList'
+          description: ''
+  /api/references/means-types/{id}/:
+    get:
+      operationId: references_means_types_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means type.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansType'
+          description: ''
+  /api/references/partner-types/:
+    get:
+      operationId: references_partner_types_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartnerTypeList'
+          description: ''
+  /api/references/partner-types/{id}/:
+    get:
+      operationId: references_partner_types_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner type.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerType'
+          description: ''
+  /api/references/person-roles/:
+    get:
+      operationId: references_person_roles_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonRoleList'
+          description: ''
+  /api/references/person-roles/{id}/:
+    get:
+      operationId: references_person_roles_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person role.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonRole'
+          description: ''
+  /api/references/person-statuses/:
+    get:
+      operationId: references_person_statuses_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonStatusList'
+          description: ''
+  /api/references/person-statuses/{id}/:
+    get:
+      operationId: references_person_statuses_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person status.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatus'
+          description: ''
+  /api/references/priorities/:
+    get:
+      operationId: references_priorities_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPriorityList'
+          description: ''
+  /api/references/priorities/{id}/:
+    get:
+      operationId: references_priorities_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) priority.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Priority'
+          description: ''
+  /api/references/severities/:
+    get:
+      operationId: references_severities_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSeverityList'
+          description: ''
+  /api/references/severities/{id}/:
+    get:
+      operationId: references_severities_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) severity.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Severity'
+          description: ''
+  /api/references/vessel-types/:
+    get:
+      operationId: references_vessel_types_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVesselTypeList'
+          description: ''
+  /api/references/vessel-types/{id}/:
+    get:
+      operationId: references_vessel_types_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel type.
+        required: true
+      tags:
+      - references
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselType'
+          description: ''
+  /api/reports/daily/:
+    get:
+      operationId: reports_daily_list
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: integer
+      - in: query
+        name: is_validated
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: team
+        schema:
+          type: string
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDailyReportList'
+          description: ''
+    post:
+      operationId: reports_daily_create
+      tags:
+      - reports
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReport'
+          description: ''
+  /api/reports/daily/{id}/:
+    get:
+      operationId: reports_daily_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) daily report.
+        required: true
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReport'
+          description: ''
+    put:
+      operationId: reports_daily_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) daily report.
+        required: true
+      tags:
+      - reports
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReport'
+          description: ''
+    patch:
+      operationId: reports_daily_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) daily report.
+        required: true
+      tags:
+      - reports
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyReportRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReport'
+          description: ''
+    delete:
+      operationId: reports_daily_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) daily report.
+        required: true
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/reports/daily/{id}/validate/:
+    post:
+      operationId: reports_daily_validate_create
+      description: Validation par le chef de quart -> déclenche l'envoi email (§6
+        spec v2).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) daily report.
+        required: true
+      tags:
+      - reports
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReport'
+          description: ''
+  /api/reports/dashboard/:
+    get:
+      operationId: reports_dashboard_retrieve
+      description: Indicateurs agrégés sur alertes, coordinations et moyens, période
+        réglable.
+      summary: Tableau de bord global
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: string
+        description: ID du centre pour filtrer.
+      - in: query
+        name: period
+        schema:
+          type: integer
+        description: Nombre de jours en arrière (défaut 30).
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalDashboardResponse'
+          description: ''
+  /api/sar/:
+    get:
+      operationId: sar_list
+      parameters:
+      - in: query
+        name: availability
+        schema:
+          type: string
+          enum:
+          - AVAILABLE
+          - ENGAGED
+          - UNAVAILABLE
+        description: |-
+          * `AVAILABLE` - Disponible
+          * `ENGAGED` - Engagé
+          * `UNAVAILABLE` - Indisponible / maintenance
+      - in: query
+        name: center
+        schema:
+          type: integer
+      - in: query
+        name: means_type
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - sar
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMeansList'
+          description: ''
+    post:
+      operationId: sar_create
+      tags:
+      - sar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Means'
+          description: ''
+  /api/sar/{id}/:
+    get:
+      operationId: sar_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means.
+        required: true
+      tags:
+      - sar
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Means'
+          description: ''
+    put:
+      operationId: sar_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means.
+        required: true
+      tags:
+      - sar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Means'
+          description: ''
+    patch:
+      operationId: sar_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means.
+        required: true
+      tags:
+      - sar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Means'
+          description: ''
+    delete:
+      operationId: sar_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means.
+        required: true
+      tags:
+      - sar
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/sar/engagements/:
+    get:
+      operationId: sar_engagements_list
+      parameters:
+      - in: query
+        name: alert
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: means
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      tags:
+      - sar
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMeansEngagementList'
+          description: ''
+    post:
+      operationId: sar_engagements_create
+      tags:
+      - sar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansEngagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansEngagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansEngagementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansEngagement'
+          description: ''
+  /api/sar/engagements/{id}/:
+    get:
+      operationId: sar_engagements_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means engagement.
+        required: true
+      tags:
+      - sar
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansEngagement'
+          description: ''
+    put:
+      operationId: sar_engagements_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means engagement.
+        required: true
+      tags:
+      - sar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansEngagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansEngagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansEngagementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansEngagement'
+          description: ''
+    patch:
+      operationId: sar_engagements_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means engagement.
+        required: true
+      tags:
+      - sar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansEngagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansEngagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansEngagementRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansEngagement'
+          description: ''
+    delete:
+      operationId: sar_engagements_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means engagement.
+        required: true
+      tags:
+      - sar
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/users/:
+    get:
+      operationId: users_list
+      description: Gestion des comptes - réservée au Super Administrateur.
+      parameters:
+      - in: query
+        name: center
+        schema:
+          type: integer
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - ADMIN
+          - OPERATOR
+          - SUPERADMIN
+        description: |-
+          * `SUPERADMIN` - Super Administrateur
+          * `ADMIN` - Administrateur
+          * `OPERATOR` - Opérateur
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: team
+        schema:
+          type: string
+          nullable: true
+          enum:
+          - CAR1
+          - CAR2
+          - CAR3
+          - CAR4
+          - MRSC
+        description: |-
+          * `CAR1` - Car 1 (Abidjan)
+          * `CAR2` - Car 2 (Abidjan)
+          * `CAR3` - Car 3 (Abidjan)
+          * `CAR4` - Car 4 (Abidjan)
+          * `MRSC` - MRSC San Pedro
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+    post:
+      operationId: users_create
+      description: Gestion des comptes - réservée au Super Administrateur.
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve
+      description: Gestion des comptes - réservée au Super Administrateur.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) utilisateur.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    put:
+      operationId: users_update
+      description: Gestion des comptes - réservée au Super Administrateur.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) utilisateur.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      description: Gestion des comptes - réservée au Super Administrateur.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) utilisateur.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    delete:
+      operationId: users_destroy
+      description: Gestion des comptes - réservée au Super Administrateur.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) utilisateur.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/users/me/:
+    get:
+      operationId: users_me_retrieve
+      description: Gestion des comptes - réservée au Super Administrateur.
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/password-reset-requests/:
+    get:
+      operationId: users_password_reset_requests_list
+      description: Liste des demandes de réinitialisation - réservé au Super Administrateur.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - RESOLVED
+        description: |-
+          * `PENDING` - En attente
+          * `RESOLVED` - Traitée
+      - in: query
+        name: user
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPasswordResetRequestList'
+          description: ''
+  /api/users/password-reset-requests/{id}/:
+    get:
+      operationId: users_password_reset_requests_retrieve
+      description: Liste des demandes de réinitialisation - réservé au Super Administrateur.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) Demande de réinitialisation
+          de mot de passe.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequest'
+          description: ''
+  /api/users/password-reset-requests/{id}/resolve/:
+    post:
+      operationId: users_password_reset_requests_resolve_create
+      description: Traite UNE demande.
+      summary: Traiter une demande
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) Demande de réinitialisation
+          de mot de passe.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolvePasswordResetRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResolvePasswordResetRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResolvePasswordResetRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequest'
+          description: ''
+  /api/users/password-reset-requests/bulk_resolve/:
+    post:
+      operationId: users_password_reset_requests_bulk_resolve_create
+      description: Traite PLUSIEURS demandes en un seul appel (le cumul demandé).
+      summary: Traiter plusieurs demandes en une fois
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkResolveRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BulkResolveRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BulkResolveRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Résultat pour chaque demande (resolved ou introuvable).
+  /api/vessels/:
+    get:
+      operationId: vessels_list
+      parameters:
+      - in: query
+        name: flag
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - name: sort
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: vessel_type
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - vessels
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVesselList'
+          description: ''
+    post:
+      operationId: vessels_create
+      tags:
+      - vessels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VesselRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VesselRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VesselRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vessel'
+          description: ''
+  /api/vessels/{id}/:
+    get:
+      operationId: vessels_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel.
+        required: true
+      tags:
+      - vessels
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vessel'
+          description: ''
+    put:
+      operationId: vessels_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel.
+        required: true
+      tags:
+      - vessels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VesselRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VesselRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VesselRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vessel'
+          description: ''
+    patch:
+      operationId: vessels_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel.
+        required: true
+      tags:
+      - vessels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVesselRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVesselRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVesselRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vessel'
+          description: ''
+    delete:
+      operationId: vessels_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel.
+        required: true
+      tags:
+      - vessels
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+components:
+  schemas:
+    ActionTypeEnum:
+      enum:
+      - CREATE
+      - UPDATE
+      - STATUS_CHANGE
+      - TRANSMIT
+      - ENGAGEMENT
+      - LOGIN
+      type: string
+      description: |-
+        * `CREATE` - Création
+        * `UPDATE` - Modification
+        * `STATUS_CHANGE` - Changement de statut
+        * `TRANSMIT` - Transmission partenaire
+        * `ENGAGEMENT` - Engagement de moyen
+        * `LOGIN` - Connexion
+    AlertDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        number:
+          type: string
+          readOnly: true
+        center:
+          type: integer
+        call_time:
+          type: string
+          format: date-time
+          description: Heure exacte de l'appel/signalement
+        channel:
+          type: string
+          format: uuid
+        category:
+          type: string
+          format: uuid
+        priority:
+          type: string
+          format: uuid
+          nullable: true
+        severity:
+          type: string
+          format: uuid
+          nullable: true
+        vessel:
+          type: string
+          format: uuid
+          nullable: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        position_text:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AlertStatusEnum'
+          readOnly: true
+        operator_signature:
+          type: string
+          description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
+          maxLength: 100
+        notified_partner:
+          type: string
+          format: uuid
+          nullable: true
+        notified_at:
+          type: string
+          format: date-time
+          nullable: true
+        involved_people:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertPerson'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertHistory'
+          readOnly: true
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - call_time
+      - category
+      - channel
+      - created_at
+      - created_by
+      - description
+      - history
+      - id
+      - number
+      - operator_signature
+      - status
+      - updated_at
+    AlertDetailRequest:
+      type: object
+      properties:
+        center:
+          type: integer
+        call_time:
+          type: string
+          format: date-time
+          description: Heure exacte de l'appel/signalement
+        channel:
+          type: string
+          format: uuid
+        category:
+          type: string
+          format: uuid
+        priority:
+          type: string
+          format: uuid
+          nullable: true
+        severity:
+          type: string
+          format: uuid
+          nullable: true
+        vessel:
+          type: string
+          format: uuid
+          nullable: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        position_text:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+        operator_signature:
+          type: string
+          minLength: 1
+          description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
+          maxLength: 100
+        notified_partner:
+          type: string
+          format: uuid
+          nullable: true
+        notified_at:
+          type: string
+          format: date-time
+          nullable: true
+        involved_people:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertPersonRequest'
+      required:
+      - call_time
+      - category
+      - channel
+      - description
+      - operator_signature
+    AlertHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        old_status:
+          type: string
+          readOnly: true
+        new_status:
+          type: string
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        user_name:
+          type: string
+          readOnly: true
+        comment:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - comment
+      - created_at
+      - id
+      - new_status
+      - old_status
+      - user
+      - user_name
+    AlertList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        number:
+          type: string
+          readOnly: true
+        center:
+          type: integer
+        category:
+          type: string
+          format: uuid
+        category_name:
+          type: string
+          readOnly: true
+        priority:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/AlertStatusEnum'
+        status_display:
+          type: string
+          readOnly: true
+        call_time:
+          type: string
+          format: date-time
+          description: Heure exacte de l'appel/signalement
+        operator_signature:
+          type: string
+          description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
+          maxLength: 100
+      required:
+      - call_time
+      - category
+      - category_name
+      - center
+      - id
+      - number
+      - operator_signature
+      - status_display
+    AlertPerson:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        nationality:
+          type: string
+          maxLength: 100
+        is_victim:
+          type: boolean
+        status_note:
+          type: string
+          maxLength: 255
+      required:
+      - id
+    AlertPersonRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        nationality:
+          type: string
+          maxLength: 100
+        is_victim:
+          type: boolean
+        status_note:
+          type: string
+          maxLength: 255
+    AlertSource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    AlertStatusEnum:
+      enum:
+      - NEW
+      - QUALIFIED
+      - TRANSMITTED
+      - CLOSED
+      type: string
+      description: |-
+        * `NEW` - Nouvelle
+        * `QUALIFIED` - Qualifiée
+        * `TRANSMITTED` - Transmise au partenaire
+        * `CLOSED` - Clôturée
+    AlertsToday:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+          description: 'Ex : {"NEW": 3, "QUALIFIED": 1}'
+        by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/TotalByCategory'
+      required:
+      - by_category
+      - by_status
+      - count
+      - date
+    AvailabilityEnum:
+      enum:
+      - AVAILABLE
+      - ENGAGED
+      - UNAVAILABLE
+      type: string
+      description: |-
+        * `AVAILABLE` - Disponible
+        * `ENGAGED` - Engagé
+        * `UNAVAILABLE` - Indisponible / maintenance
+    BlankEnum:
+      enum:
+      - ''
+    BulkResolveItemRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - id
+      - new_password
+    BulkResolveRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkResolveItemRequest'
+      required:
+      - items
+    Center:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        code:
+          type: string
+          maxLength: 20
+        center_type:
+          $ref: '#/components/schemas/CenterTypeEnum'
+        city:
+          type: string
+          maxLength: 100
+        country:
+          type: string
+          maxLength: 100
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - center_type
+      - city
+      - code
+      - created_at
+      - id
+      - name
+      - updated_at
+    CenterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        code:
+          type: string
+          minLength: 1
+          maxLength: 20
+        center_type:
+          $ref: '#/components/schemas/CenterTypeEnum'
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        country:
+          type: string
+          minLength: 1
+          maxLength: 100
+        is_active:
+          type: boolean
+      required:
+      - center_type
+      - city
+      - code
+      - name
+    CenterTypeEnum:
+      enum:
+      - MRCC
+      - MRSC
+      type: string
+      description: |-
+        * `MRCC` - MRCC
+        * `MRSC` - MRSC
+    ChangeStatusRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/AlertStatusEnum'
+        comment:
+          type: string
+      required:
+      - status
+    DailyReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        report_date:
+          type: string
+          format: date
+        team:
+          type: string
+          description: Quart ayant rédigé le rapport (Car1-4/MRSC)
+          maxLength: 20
+        summary:
+          type: string
+          description: Synthèse des événements des dernières 24h
+        alerts_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        rescues_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        coordinations_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        calls_received_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_validated:
+          type: boolean
+          readOnly: true
+        validated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        email_sent:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        center:
+          type: integer
+        validated_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+      required:
+      - center
+      - created_at
+      - created_by
+      - email_sent
+      - id
+      - is_validated
+      - report_date
+      - summary
+      - team
+      - updated_at
+      - validated_at
+      - validated_by
+    DailyReportRequest:
+      type: object
+      properties:
+        report_date:
+          type: string
+          format: date
+        team:
+          type: string
+          minLength: 1
+          description: Quart ayant rédigé le rapport (Car1-4/MRSC)
+          maxLength: 20
+        summary:
+          type: string
+          minLength: 1
+          description: Synthèse des événements des dernières 24h
+        alerts_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        rescues_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        coordinations_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        calls_received_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        center:
+          type: integer
+      required:
+      - center
+      - report_date
+      - summary
+      - team
+    EventLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        user_name:
+          type: string
+          readOnly: true
+        action_type:
+          allOf:
+          - $ref: '#/components/schemas/ActionTypeEnum'
+          readOnly: true
+        action_type_display:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+      required:
+      - action_type
+      - action_type_display
+      - description
+      - id
+      - timestamp
+      - user
+      - user_name
+    GlobalDashboardResponse:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        alerts_total:
+          type: integer
+        alerts_new:
+          type: integer
+        alerts_qualified:
+          type: integer
+        coordinations_count:
+          type: integer
+        rescues_count:
+          type: integer
+        calls_received_count:
+          type: integer
+        by_category:
+          type: array
+          items: {}
+        by_status:
+          type: array
+          items: {}
+      required:
+      - alerts_new
+      - alerts_qualified
+      - alerts_total
+      - by_category
+      - by_status
+      - calls_received_count
+      - coordinations_count
+      - period_days
+      - rescues_count
+    HeatmapPoint:
+      type: object
+      properties:
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+        category__name:
+          type: string
+        number:
+          type: string
+      required:
+      - category__name
+      - latitude
+      - longitude
+      - number
+    HeatmapResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeatmapPoint'
+      required:
+      - count
+      - points
+    IncidentCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    IncidentsOpen:
+      type: object
+      properties:
+        count:
+          type: integer
+        high_priority_count:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/TotalByCategory'
+      required:
+      - by_category
+      - by_status
+      - count
+      - high_priority_count
+    LogoutRequestRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    Means:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        means_type_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        registration:
+          type: string
+          maxLength: 50
+        availability:
+          $ref: '#/components/schemas/AvailabilityEnum'
+        home_base:
+          type: string
+          maxLength: 150
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        means_type:
+          type: string
+          format: uuid
+        center:
+          type: integer
+          nullable: true
+        partner:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - created_at
+      - id
+      - means_type
+      - means_type_name
+      - name
+      - updated_at
+    MeansCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    MeansEngagement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        means_name:
+          type: string
+          readOnly: true
+        alert_number:
+          type: string
+          readOnly: true
+        engaged_at:
+          type: string
+          format: date-time
+          readOnly: true
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        mission_role:
+          type: string
+          maxLength: 200
+        report:
+          type: string
+        alert:
+          type: string
+          format: uuid
+        means:
+          type: string
+          format: uuid
+        engaged_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+      required:
+      - alert
+      - alert_number
+      - engaged_at
+      - engaged_by
+      - id
+      - means
+      - means_name
+    MeansEngagementRequest:
+      type: object
+      properties:
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        mission_role:
+          type: string
+          maxLength: 200
+        report:
+          type: string
+        alert:
+          type: string
+          format: uuid
+        means:
+          type: string
+          format: uuid
+      required:
+      - alert
+      - means
+    MeansRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        registration:
+          type: string
+          maxLength: 50
+        availability:
+          $ref: '#/components/schemas/AvailabilityEnum'
+        home_base:
+          type: string
+          maxLength: 150
+        means_type:
+          type: string
+          format: uuid
+        center:
+          type: integer
+          nullable: true
+        partner:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - means_type
+      - name
+    MeansType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        category:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - id
+      - name
+    Meeting:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        created_by_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        meeting_date:
+          type: string
+          format: date
+        minutes:
+          type: string
+          description: Compte-rendu de la réunion (texte libre ou collé)
+        attendance_sheet:
+          type: string
+          format: uri
+          description: Fiche de présence scannée (PDF) avec signatures manuscrites
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+      required:
+      - attendance_sheet
+      - created_at
+      - created_by
+      - created_by_name
+      - id
+      - meeting_date
+      - minutes
+      - title
+      - updated_at
+    MeetingRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        meeting_date:
+          type: string
+          format: date
+        minutes:
+          type: string
+          minLength: 1
+          description: Compte-rendu de la réunion (texte libre ou collé)
+        attendance_sheet:
+          type: string
+          format: binary
+          description: Fiche de présence scannée (PDF) avec signatures manuscrites
+      required:
+      - attendance_sheet
+      - meeting_date
+      - minutes
+      - title
+    NullEnum:
+      enum:
+      - null
+    PaginatedAlertListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertList'
+    PaginatedAlertSourceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertSource'
+    PaginatedCenterList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Center'
+    PaginatedDailyReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyReport'
+    PaginatedEventLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventLog'
+    PaginatedIncidentCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentCategory'
+    PaginatedMeansCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeansCategory'
+    PaginatedMeansEngagementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeansEngagement'
+    PaginatedMeansList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Means'
+    PaginatedMeansTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeansType'
+    PaginatedMeetingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meeting'
+    PaginatedPartnerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Partner'
+    PaginatedPartnerTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerType'
+    PaginatedPasswordResetRequestList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PasswordResetRequest'
+    PaginatedPersonList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Person'
+    PaginatedPersonRoleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonRole'
+    PaginatedPersonStatusList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonStatus'
+    PaginatedPriorityList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Priority'
+    PaginatedSeverityList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Severity'
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PaginatedVesselList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vessel'
+    PaginatedVesselTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselType'
+    Partner:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        partner_type_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        coverage_area:
+          type: string
+          maxLength: 200
+        contact_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 30
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        partner_type:
+          type: string
+          format: uuid
+      required:
+      - created_at
+      - id
+      - name
+      - partner_type
+      - partner_type_name
+      - updated_at
+    PartnerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        coverage_area:
+          type: string
+          maxLength: 200
+        contact_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 30
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        is_active:
+          type: boolean
+        partner_type:
+          type: string
+          format: uuid
+      required:
+      - name
+      - partner_type
+    PartnerType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    PasswordResetRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          readOnly: true
+          description: Message optionnel de l'utilisateur
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PasswordResetStatusEnum'
+          readOnly: true
+        requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        resolved_by_username:
+          type: string
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - id
+      - note
+      - requested_at
+      - resolved_at
+      - resolved_by
+      - resolved_by_username
+      - status
+      - user
+      - username
+    PasswordResetRequestCreateRequest:
+      type: object
+      description: Utilisé par l'utilisateur qui a oublié son mot de passe (pas besoin
+        d'être connecté).
+      properties:
+        username:
+          type: string
+          minLength: 1
+        note:
+          type: string
+      required:
+      - username
+    PasswordResetStatusEnum:
+      enum:
+      - PENDING
+      - RESOLVED
+      type: string
+      description: |-
+        * `PENDING` - En attente
+        * `RESOLVED` - Traitée
+    PatchedAlertDetailRequest:
+      type: object
+      properties:
+        center:
+          type: integer
+        call_time:
+          type: string
+          format: date-time
+          description: Heure exacte de l'appel/signalement
+        channel:
+          type: string
+          format: uuid
+        category:
+          type: string
+          format: uuid
+        priority:
+          type: string
+          format: uuid
+          nullable: true
+        severity:
+          type: string
+          format: uuid
+          nullable: true
+        vessel:
+          type: string
+          format: uuid
+          nullable: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        position_text:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+        operator_signature:
+          type: string
+          minLength: 1
+          description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
+          maxLength: 100
+        notified_partner:
+          type: string
+          format: uuid
+          nullable: true
+        notified_at:
+          type: string
+          format: date-time
+          nullable: true
+        involved_people:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertPersonRequest'
+    PatchedCenterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        code:
+          type: string
+          minLength: 1
+          maxLength: 20
+        center_type:
+          $ref: '#/components/schemas/CenterTypeEnum'
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        country:
+          type: string
+          minLength: 1
+          maxLength: 100
+        is_active:
+          type: boolean
+    PatchedDailyReportRequest:
+      type: object
+      properties:
+        report_date:
+          type: string
+          format: date
+        team:
+          type: string
+          minLength: 1
+          description: Quart ayant rédigé le rapport (Car1-4/MRSC)
+          maxLength: 20
+        summary:
+          type: string
+          minLength: 1
+          description: Synthèse des événements des dernières 24h
+        alerts_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        rescues_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        coordinations_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        calls_received_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        center:
+          type: integer
+    PatchedMeansEngagementRequest:
+      type: object
+      properties:
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        mission_role:
+          type: string
+          maxLength: 200
+        report:
+          type: string
+        alert:
+          type: string
+          format: uuid
+        means:
+          type: string
+          format: uuid
+    PatchedMeansRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        registration:
+          type: string
+          maxLength: 50
+        availability:
+          $ref: '#/components/schemas/AvailabilityEnum'
+        home_base:
+          type: string
+          maxLength: 150
+        means_type:
+          type: string
+          format: uuid
+        center:
+          type: integer
+          nullable: true
+        partner:
+          type: string
+          format: uuid
+          nullable: true
+    PatchedMeetingRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        meeting_date:
+          type: string
+          format: date
+        minutes:
+          type: string
+          minLength: 1
+          description: Compte-rendu de la réunion (texte libre ou collé)
+        attendance_sheet:
+          type: string
+          format: binary
+          description: Fiche de présence scannée (PDF) avec signatures manuscrites
+    PatchedPartnerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        coverage_area:
+          type: string
+          maxLength: 200
+        contact_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 30
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        is_active:
+          type: boolean
+        partner_type:
+          type: string
+          format: uuid
+    PatchedPersonRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        nationality:
+          type: string
+          maxLength: 100
+        age:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        status_note:
+          type: string
+        handled_by:
+          type: string
+          maxLength: 200
+        alert:
+          type: string
+          format: uuid
+        vessel:
+          type: string
+          format: uuid
+          nullable: true
+        role:
+          type: string
+          format: uuid
+        status:
+          type: string
+          format: uuid
+    PatchedUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          title: Nom d’utilisateur
+          description: Requis. 150 caractères maximum. Uniquement des lettres, nombres
+            et les caractères « @ », « . », « + », « - » et « _ ».
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        email:
+          title: Adresse électronique
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        team:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/TeamEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        center:
+          type: integer
+          nullable: true
+        phone:
+          type: string
+          maxLength: 30
+        is_active:
+          type: boolean
+          title: Actif
+          description: Précise si l’utilisateur doit être considéré comme actif. Décochez
+            ceci plutôt que de supprimer le compte.
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+    PatchedVesselRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        flag:
+          type: string
+          title: Pavillon
+          maxLength: 100
+        mmsi:
+          type: string
+          maxLength: 20
+        imo:
+          type: string
+          title: Numéro IMO
+          maxLength: 20
+        call_sign:
+          type: string
+          maxLength: 30
+        owner:
+          type: string
+          maxLength: 150
+        crew_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        vessel_type:
+          type: string
+          format: uuid
+          nullable: true
+    Person:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        role_name:
+          type: string
+          readOnly: true
+        status_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        nationality:
+          type: string
+          maxLength: 100
+        age:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        status_note:
+          type: string
+        handled_by:
+          type: string
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        alert:
+          type: string
+          format: uuid
+        vessel:
+          type: string
+          format: uuid
+          nullable: true
+        role:
+          type: string
+          format: uuid
+        status:
+          type: string
+          format: uuid
+      required:
+      - alert
+      - created_at
+      - id
+      - role
+      - role_name
+      - status
+      - status_name
+      - updated_at
+    PersonRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        nationality:
+          type: string
+          maxLength: 100
+        age:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        status_note:
+          type: string
+        handled_by:
+          type: string
+          maxLength: 200
+        alert:
+          type: string
+          format: uuid
+        vessel:
+          type: string
+          format: uuid
+          nullable: true
+        role:
+          type: string
+          format: uuid
+        status:
+          type: string
+          format: uuid
+      required:
+      - alert
+      - role
+      - status
+    PersonRole:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    PersonStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    PersonnelAvailable:
+      type: object
+      properties:
+        total:
+          type: integer
+        available:
+          type: integer
+        engaged:
+          type: integer
+        unavailable:
+          type: integer
+        available_by_type:
+          type: array
+          items:
+            $ref: '#/components/schemas/TotalByType'
+      required:
+      - available
+      - available_by_type
+      - engaged
+      - total
+      - unavailable
+    Priority:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - id
+      - name
+    ResolvePasswordResetRequest:
+      type: object
+      properties:
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - new_password
+    RoleEnum:
+      enum:
+      - SUPERADMIN
+      - ADMIN
+      - OPERATOR
+      type: string
+      description: |-
+        * `SUPERADMIN` - Super Administrateur
+        * `ADMIN` - Administrateur
+        * `OPERATOR` - Opérateur
+    ScopeEnum:
+      enum:
+      - center
+      - global
+      type: string
+      description: |-
+        * `center` - center
+        * `global` - global
+    Severity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - id
+      - name
+    SexEnum:
+      enum:
+      - M
+      - F
+      type: string
+      description: |-
+        * `M` - Masculin
+        * `F` - Féminin
+    StatsByRole:
+      type: object
+      properties:
+        role:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ScopeEnum'
+        alerts_today:
+          type: integer
+        alerts_open:
+          type: integer
+        alerts_by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        team:
+          type: string
+          description: Opérateur uniquement.
+        daily_report_submitted_today:
+          type: boolean
+          description: Opérateur uniquement.
+        alerts_last_30_days:
+          type: integer
+          description: Admin et Super Admin.
+        alerts_by_center:
+          type: array
+          items:
+            $ref: '#/components/schemas/TotalByCenter'
+          description: Admin et Super Admin.
+        daily_reports_pending_validation:
+          type: integer
+          description: Admin et Super Admin.
+        means_available:
+          type: integer
+          description: Admin et Super Admin.
+        pending_password_resets:
+          type: integer
+          description: Super Admin uniquement.
+        active_users:
+          type: integer
+          description: Super Admin uniquement.
+      required:
+      - alerts_by_status
+      - alerts_open
+      - alerts_today
+      - role
+      - scope
+    TeamEnum:
+      enum:
+      - CAR1
+      - CAR2
+      - CAR3
+      - CAR4
+      - MRSC
+      type: string
+      description: |-
+        * `CAR1` - Car 1 (Abidjan)
+        * `CAR2` - Car 2 (Abidjan)
+        * `CAR3` - Car 3 (Abidjan)
+        * `CAR4` - Car 4 (Abidjan)
+        * `MRSC` - MRSC San Pedro
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TotalByCategory:
+      type: object
+      properties:
+        category__name:
+          type: string
+        total:
+          type: integer
+      required:
+      - category__name
+      - total
+    TotalByCenter:
+      type: object
+      properties:
+        center__name:
+          type: string
+        total:
+          type: integer
+      required:
+      - center__name
+      - total
+    TotalByType:
+      type: object
+      properties:
+        means_type__name:
+          type: string
+        total:
+          type: integer
+      required:
+      - means_type__name
+      - total
+    TransmitRequest:
+      type: object
+      properties:
+        partner:
+          type: string
+          format: uuid
+        comment:
+          type: string
+      required:
+      - partner
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          title: Nom d’utilisateur
+          description: Requis. 150 caractères maximum. Uniquement des lettres, nombres
+            et les caractères « @ », « . », « + », « - » et « _ ».
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email:
+          title: Adresse électronique
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        team:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/TeamEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        center:
+          type: integer
+          nullable: true
+        center_name:
+          type: string
+          readOnly: true
+        phone:
+          type: string
+          maxLength: 30
+        is_active:
+          type: boolean
+          title: Actif
+          description: Précise si l’utilisateur doit être considéré comme actif. Décochez
+            ceci plutôt que de supprimer le compte.
+      required:
+      - center_name
+      - first_name
+      - id
+      - last_name
+      - username
+    UserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          title: Nom d’utilisateur
+          description: Requis. 150 caractères maximum. Uniquement des lettres, nombres
+            et les caractères « @ », « . », « + », « - » et « _ ».
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        email:
+          title: Adresse électronique
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        team:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/TeamEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        center:
+          type: integer
+          nullable: true
+        phone:
+          type: string
+          maxLength: 30
+        is_active:
+          type: boolean
+          title: Actif
+          description: Précise si l’utilisateur doit être considéré comme actif. Décochez
+            ceci plutôt que de supprimer le compte.
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - first_name
+      - last_name
+      - username
+    Vessel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        vessel_type_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        flag:
+          type: string
+          title: Pavillon
+          maxLength: 100
+        mmsi:
+          type: string
+          maxLength: 20
+        imo:
+          type: string
+          title: Numéro IMO
+          maxLength: 20
+        call_sign:
+          type: string
+          maxLength: 30
+        owner:
+          type: string
+          maxLength: 150
+        crew_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        vessel_type:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - updated_at
+      - vessel_type_name
+    VesselRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        flag:
+          type: string
+          title: Pavillon
+          maxLength: 100
+        mmsi:
+          type: string
+          maxLength: 20
+        imo:
+          type: string
+          title: Numéro IMO
+          maxLength: 20
+        call_sign:
+          type: string
+          maxLength: 30
+        owner:
+          type: string
+          maxLength: 150
+        crew_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        vessel_type:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - name
+    VesselType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          oneOf:
+          - type: string
+            maxLength: 80
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        name:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+- name: auth
+  description: Connexion, déconnexion, demande de réinitialisation de mot de passe.
+- name: alerts
+  description: 'Module central : créer, qualifier, transmettre, clôturer une alerte.'
+- name: dashboard
+  description: Indicateurs agrégés, adaptés au rôle du compte connecté.
+- name: users
+  description: Comptes (Super Admin) et demandes de réinitialisation de mot de passe.
+- name: centers
+  description: MRCC Abidjan et MRSC San Pedro.
+- name: references
+  description: Toutes les listes déroulantes (catégories, priorités, types de navire...).
+- name: vessels
+  description: Fiches des navires concernés par une alerte.
+- name: partners
+  description: Organismes recevant une alerte transmise.
+- name: persons
+  description: Personnes et victimes impliquées dans une alerte.
+- name: sar
+  description: Moyens de secours (Search And Rescue) et leur engagement sur une alerte.
+- name: event-logs
+  description: Journal d'audit automatique. Lecture seule, Admin et Super Admin.
+- name: reports
+  description: Rapports de fin de journée.
+- name: meetings
+  description: Comptes-rendus de réunion avec fiche de présence PDF.

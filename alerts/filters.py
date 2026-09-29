@@ -23,9 +23,18 @@ class AlertFilter(django_filters.FilterSet):
     category : UUID, code (ex: surete) ou nom.
     call_time_after / call_time_before : dates ISO 8601.
     """
-    status = django_filters.CharFilter(method="filter_status")
-    priority = django_filters.CharFilter(method="filter_priority")
-    category = django_filters.CharFilter(method="filter_category")
+    status = django_filters.CharFilter(
+        method="filter_status",
+        help_text="NEW, QUALIFIED, TRANSMITTED, CLOSED, ou active (tout sauf CLOSED). Valeurs multiples séparées par des virgules.",
+    )
+    priority = django_filters.CharFilter(
+        method="filter_priority",
+        help_text="UUID, code (ex : elevee) ou nom de la priorité.",
+    )
+    category = django_filters.CharFilter(
+        method="filter_category",
+        help_text="UUID, code (ex : surete) ou nom de la catégorie.",
+    )
     call_time_after = django_filters.IsoDateTimeFilter(field_name="call_time", lookup_expr="gte")
     call_time_before = django_filters.IsoDateTimeFilter(field_name="call_time", lookup_expr="lte")
 

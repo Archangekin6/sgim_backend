@@ -205,20 +205,42 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'SGIM API',
-    'DESCRIPTION': 'API du Système de Gestion des Incidents Maritimes - MRCC Abidjan / MRSC San Pedro',
+    'DESCRIPTION': (
+        "API du Système de Gestion des Incidents Maritimes (MRCC Abidjan / MRSC San Pedro).\n\n"
+        "**Authentification** : `POST /api/auth/token/` renvoie `access` et `refresh`. "
+        "Envoyer `Authorization: Bearer <access>` sur chaque requête. "
+        "L'access expire au bout de 8 h : `POST /api/auth/token/refresh/`.\n\n"
+        "**Listes déroulantes** : envoyer l'UUID de l'entrée choisie, jamais son libellé. "
+        "Les options se lisent sous `/api/references/...`.\n\n"
+        "**Listes** : réponse paginée `{count, next, previous, results}` (25 par page). "
+        "Tri avec `sort` (ex : `-created_at`), recherche avec `search`.\n\n"
+        "**Erreurs** : 400 données invalides, 401 non connecté, 403 rôle insuffisant, 404 introuvable."
+    ),
     'VERSION': '2.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': r'/api',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+        'displayRequestDuration': True,
+    },
     'TAGS': [
-        {'name': 'alerts', 'description': 'ALERTES — Le module central : créer un signalement, le qualifier, le transmettre, le clôturer.'},
-        {'name': 'users', 'description': 'UTILISATEURS — Gestion des comptes (Super Admin) + endpoint /me pour connaître le compte connecté.'},
-        {'name': 'centers', 'description': 'CENTRES — MRCC Abidjan et MRSC San Pedro.'},
-        {'name': 'references', 'description': 'RÉFÉRENTIELS — Toutes les listes déroulantes (catégories, priorités, types de navire...).'},
-        {'name': 'vessels', 'description': 'NAVIRES — Fiches des bateaux concernés par une alerte.'},
-        {'name': 'partners', 'description': 'PARTENAIRES — Organismes externes recevant une alerte transmise. Réservé Admin/Super Admin.'},
-        {'name': 'persons', 'description': 'PERSONNES / VICTIMES — Personnes impliquées dans une alerte.'},
-        {'name': 'sar', 'description': 'MOYENS DE SECOURS (Search And Rescue) — Vedettes, hélicoptères, et leur engagement sur une alerte.'},
-        {'name': 'event-logs', 'description': 'JOURNAL DES ÉVÉNEMENTS — Historique automatique des actions. Lecture seule, Admin/Super Admin.'},
-        {'name': 'reports', 'description': 'RAPPORTS — Rapport de fin de journée + tableau de bord.'},
-        {'name': 'meetings', 'description': 'RÉUNIONS — Comptes-rendus avec pièce jointe PDF.'},
+        {'name': 'auth', 'description': 'Connexion, déconnexion, demande de réinitialisation de mot de passe.'},
+        {'name': 'alerts', 'description': 'Module central : créer, qualifier, transmettre, clôturer une alerte.'},
+        {'name': 'dashboard', 'description': 'Indicateurs agrégés, adaptés au rôle du compte connecté.'},
+        {'name': 'users', 'description': 'Comptes (Super Admin) et demandes de réinitialisation de mot de passe.'},
+        {'name': 'centers', 'description': 'MRCC Abidjan et MRSC San Pedro.'},
+        {'name': 'references', 'description': 'Toutes les listes déroulantes (catégories, priorités, types de navire...).'},
+        {'name': 'vessels', 'description': 'Fiches des navires concernés par une alerte.'},
+        {'name': 'partners', 'description': 'Organismes recevant une alerte transmise.'},
+        {'name': 'persons', 'description': 'Personnes et victimes impliquées dans une alerte.'},
+        {'name': 'sar', 'description': 'Moyens de secours (Search And Rescue) et leur engagement sur une alerte.'},
+        {'name': 'event-logs', 'description': 'Journal d\'audit automatique. Lecture seule, Admin et Super Admin.'},
+        {'name': 'reports', 'description': 'Rapports de fin de journée.'},
+        {'name': 'meetings', 'description': 'Comptes-rendus de réunion avec fiche de présence PDF.'},
     ],
+    'ENUM_NAME_OVERRIDES': {
+        'AlertStatusEnum': 'alerts.models.Alert.Status',
+        'PasswordResetStatusEnum': 'accounts.models.PasswordResetRequest.Status',
+    },
 }

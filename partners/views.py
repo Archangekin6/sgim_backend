@@ -2,6 +2,7 @@ from rest_framework import viewsets
 from accounts.permissions import IsAdminTier
 from .models import Partner
 from .serializers import PartnerSerializer
+from rest_framework.permissions import IsAuthenticated
 
 
 class PartnerViewSet(viewsets.ModelViewSet):
@@ -11,3 +12,7 @@ class PartnerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminTier]
     filterset_fields = ["partner_type", "is_active"]
     search_fields = ["name", "email", "phone"]
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return [IsAdminTier()]
