@@ -61,16 +61,8 @@ class DailyReportViewSet(viewsets.ModelViewSet):
     
 
 class DashboardView(APIView):
-    """
-    Tableau de bord de pilotage consolidé (§1 spec v2) : cumul des
-    assistances, sauvetages, coordinations, appels reçus. Optimisé
-    pour une consultation simple côté mobile (JSON léger, agrégats
-    déjà calculés côté serveur).
-
-    GET /api/reports/dashboard/?period=7|30|90 (jours, défaut 30)
-    GET /api/reports/dashboard/?center=<id> (optionnel)
-    """
     permission_classes = [IsAuthenticated]
+
     @extend_schema(
         tags=["reports"],
         summary="Tableau de bord global",
