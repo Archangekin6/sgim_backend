@@ -44,6 +44,13 @@ class AlertViewSet(viewsets.ModelViewSet):
     filterset_class = AlertFilter
     ordering_fields = ["call_time", "created_at", "status", "number", "priority__level"]
     search_fields = ["number", "description", "operator_signature"]
+    
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_admin_tier:
+            qs = qs.filter(center_id=user.center_id) if user.center_id else qs.none()
+        return qs
 
     def get_serializer_class(self):
         if self.action == "list":

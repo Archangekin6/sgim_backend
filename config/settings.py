@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'event_logs',
     'reports',
     'meetings',
+    
+    'corsheaders',
 ]
 
 UNFOLD = {
@@ -192,6 +194,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
+    "https://sgim-omega.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
