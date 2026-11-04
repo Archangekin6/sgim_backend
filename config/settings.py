@@ -31,7 +31,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
 
-    'accounts',
+    'accounts', 
     'centers',
     'references',
     'vessels',
