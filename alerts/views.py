@@ -22,14 +22,20 @@ from .serializers import (
 @extend_schema_view(
     list=extend_schema(
         summary="Lister les alertes",
-        description="Liste paginée. Filtres : status, priority, category, center, channel, vessel, "
+        description="Liste paginée. Filtres : status, priority, alert_type, center, channel, vessel, "
                     "call_time_after, call_time_before. Recherche : search. Tri : sort.",
     ),
     create=extend_schema(
         summary="Créer une alerte",
-        description="Formulaire « Nouvelle Alerte ». Les champs channel, category, priority, severity "
-                    "attendent l'UUID de la liste déroulante. Le numéro, le statut NEW et le créateur sont "
-                    "générés par le serveur. Si `center` est omis, le centre du compte connecté est utilisé.",
+        description=(
+            "Formulaire « Nouvelle Alerte ».\n\n"
+            "Champs obligatoires : `call_time`, `channel` (canal de réception — UUID de AlertSource), "
+            "`alert_type` (type d'incident — UUID de IncidentCategory), `description`, `operator_signature`.\n\n"
+            "Champs optionnels : `priority`, `severity`, `vessel`, `latitude`, `longitude`, `position_text`, `involved_people`.\n\n"
+            "Champs auto-générés par le serveur : `number` (ex: ALT-ABJ-2026-0001), `status` (NEW), `created_by`.\n\n"
+            "Si `center` est omis, le centre du compte connecté est utilisé.\n\n"
+            "Le partenaire notifié (`notified_partner`) se renseigne uniquement via l'action `POST /{id}/transmit/`."
+        ),
     ),
     retrieve=extend_schema(summary="Détail d'une alerte (personnes et historique inclus)"),
     update=extend_schema(summary="Remplacer une alerte"),
@@ -38,7 +44,7 @@ from .serializers import (
 )
 class AlertViewSet(viewsets.ModelViewSet):
     queryset = Alert.objects.select_related(
-        "center", "channel", "category", "priority", "severity", "vessel", "created_by", "notified_partner"
+        "center", "channel", "alert_type", "priority", "severity", "vessel", "created_by", "notified_partner"
     ).prefetch_related("involved_people", "history").all()
     permission_classes = [IsAuthenticated]
     filterset_class = AlertFilter
@@ -82,7 +88,21 @@ class AlertViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         summary="Transmettre une alerte à un partenaire",
-        description="Enregistre le partenaire notifié et l'heure exacte de transmission (valeur légale).",
+        description=(
+            "Enregistre le partenaire notifié, l'heure exacte de transmission (valeur légale) "
+            "et envoie automatiquement un **email au partenaire** avec les détails complets de l'alerte.\n\n"
+            "**Payload :**\n"
+            "- `partner` (UUID, obligatoire) : identifiant du partenaire à notifier — "
+            "récupérer la liste via `GET /api/coordination/`.\n"
+            "- `comment` (texte, optionnel) : message de transmission libre, inclus dans l'email "
+            "et enregistré dans l'historique de l'alerte.\n\n"
+            "**Réponse :**\n"
+            "- `200` : alerte mise à jour. Si l'email a échoué, un champ `email_warning` est présent "
+            "dans la réponse (la transmission en base reste valide).\n"
+            "- `400` : partenaire inconnu.\n\n"
+            "**Note :** si le partenaire n'a pas d'adresse email configurée, "
+            "la transmission en base est effectuée sans envoi d'email."
+        ),
         request=TransmitSerializer,
         responses={
             200: AlertDetailSerializer,
@@ -100,6 +120,8 @@ class AlertViewSet(viewsets.ModelViewSet):
         except Partner.DoesNotExist:
             return Response({"detail": "Partenaire inconnu."}, status=http_status.HTTP_400_BAD_REQUEST)
 
+        comment = serializer.validated_data.get("comment", "")
+
         old_status = alert.status
         alert.notified_partner = partner
         alert.notified_at = timezone.now()
@@ -108,9 +130,39 @@ class AlertViewSet(viewsets.ModelViewSet):
 
         AlertHistory.objects.create(
             alert=alert, old_status=old_status, new_status=alert.status,
-            user=request.user, comment=serializer.validated_data.get("comment", f"Transmis à {partner.name}"),
+            user=request.user, comment=comment or f"Transmis à {partner.name}",
         )
-        alert = self.get_queryset().get(pk=alert.pk)  # recharge sans le cache prefetch obsolète
+
+        # ── Envoi email au partenaire ─────────────────────────────────────
+        if partner.email:
+            from django.template.loader import render_to_string
+            ctx = {
+                "alert": alert,
+                "partner": partner,
+                "transmitted_at": alert.notified_at,
+                "operator": request.user.get_full_name() or request.user.username,
+                "comment": comment,
+            }
+            subject = render_to_string("alerts/email_transmit_subject.txt", ctx).strip()
+            body = render_to_string("alerts/email_transmit_body.txt", ctx)
+            try:
+                from django.core.mail import send_mail
+                send_mail(
+                    subject=subject,
+                    message=body,
+                    from_email=None,   # utilise DEFAULT_FROM_EMAIL
+                    recipient_list=[partner.email],
+                    fail_silently=False,
+                )
+            except Exception as exc:
+                # L'alerte est déjà transmise en base — on ne bloque pas la réponse,
+                # mais on informe le frontend que l'email a échoué.
+                alert = self.get_queryset().get(pk=alert.pk)
+                data = AlertDetailSerializer(alert).data
+                data["email_warning"] = f"Alerte transmise, mais l'email n'a pas pu être envoyé : {exc}"
+                return Response(data, status=http_status.HTTP_200_OK)
+
+        alert = self.get_queryset().get(pk=alert.pk)
         return Response(AlertDetailSerializer(alert).data)
 
 
@@ -163,5 +215,5 @@ class HeatmapView(APIView):
         if center_id:
             qs = qs.filter(center_id=center_id)
 
-        points = list(qs.values("latitude", "longitude", "category__name", "number"))
+        points = list(qs.values("latitude", "longitude", "alert_type__name", "number"))
         return Response({"count": len(points), "points": points})

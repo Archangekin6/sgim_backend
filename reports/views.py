@@ -1,33 +1,54 @@
 from django.core.mail import send_mail
+from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import DailyReport
-from .serializers import DailyReportSerializer
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
-from django.db.models import Count
-from django.utils import timezone
-from rest_framework.views import APIView
-
 from alerts.models import Alert
+from alerts.filters import AlertFilter
 from sar.models import MeansEngagement
 
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
-from rest_framework import serializers
+from drf_spectacular.utils import (
+    OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view, inline_serializer,
+)
+
+from .exports import build_alert_pdf, build_alerts_excel, build_daily_report_pdf
+from .models import DailyReport
+from .serializers import DailyReportSerializer
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Rapports journaliers
+# ─────────────────────────────────────────────────────────────────────────────
 
+@extend_schema_view(
+    list=extend_schema(summary="Lister les rapports journaliers", tags=["reports"]),
+    retrieve=extend_schema(summary="Détail d'un rapport journalier", tags=["reports"]),
+    create=extend_schema(summary="Créer un rapport journalier", tags=["reports"]),
+    update=extend_schema(summary="Remplacer un rapport journalier", tags=["reports"]),
+    partial_update=extend_schema(summary="Modifier partiellement un rapport journalier", tags=["reports"]),
+    destroy=extend_schema(summary="Supprimer un rapport journalier", tags=["reports"]),
+)
 class DailyReportViewSet(viewsets.ModelViewSet):
     queryset = DailyReport.objects.select_related("center", "created_by", "validated_by").all()
     serializer_class = DailyReportSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ["center", "team", "is_validated"]
 
+    @extend_schema(
+        summary="Valider un rapport journalier",
+        description="Marque le rapport comme validé et envoie un e-mail à la hiérarchie.",
+        request=None,
+        responses={200: DailyReportSerializer},
+        tags=["reports"],
+    )
     @action(detail=True, methods=["post"])
     def validate(self, request, pk=None):
         """Validation par le chef de quart -> déclenche l'envoi email (§6 spec v2)."""
@@ -58,7 +79,147 @@ class DailyReportViewSet(viewsets.ModelViewSet):
             )
 
         return Response(DailyReportSerializer(report).data)
-    
+
+    @extend_schema(
+        summary="Télécharger le PDF d'un rapport journalier",
+        description="Génère et retourne la fiche PDF du rapport (A4, mise en page officielle SGIM).",
+        request=None,
+        responses={200: OpenApiResponse(description="Fichier PDF (application/pdf)")},
+        tags=["exports"],
+    )
+    @action(detail=True, methods=["get"], url_path="pdf")
+    def pdf(self, request, pk=None):
+        report = self.get_object()
+        buf = build_daily_report_pdf(report)
+        filename = f"rapport_{report.report_date}_{report.team}.pdf"
+        response = HttpResponse(buf, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Export PDF — Fiche d'alerte
+# ─────────────────────────────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=["exports"],
+    summary="Télécharger le PDF d'une alerte",
+    description=(
+        "Génère la fiche complète d'une alerte au format PDF (A4) : "
+        "informations générales, localisation, personnes impliquées, "
+        "moyens engagés et historique des statuts."
+    ),
+    responses={
+        200: OpenApiResponse(description="Fichier PDF (application/pdf)"),
+        404: OpenApiResponse(description="Alerte introuvable."),
+    },
+)
+class AlertPDFView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            alert = (
+                Alert.objects
+                .select_related(
+                    "center", "channel", "alert_type", "priority", "severity",
+                    "vessel", "created_by", "notified_partner",
+                )
+                .prefetch_related(
+                    "involved_people",
+                    "history__user",
+                    "engagements__means",
+                    "engagements__engaged_by",
+                )
+                .get(pk=pk)
+            )
+        except Alert.DoesNotExist:
+            return Response({"detail": "Alerte introuvable."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Restriction centre pour les non-admins
+        user = request.user
+        if not user.is_admin_tier and str(alert.center_id) != str(user.center_id):
+            return Response({"detail": "Accès refusé."}, status=status.HTTP_403_FORBIDDEN)
+
+        buf = build_alert_pdf(alert)
+        filename = f"alerte_{alert.number}.pdf"
+        response = HttpResponse(buf, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Export Excel — Liste des alertes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=["exports"],
+    summary="Exporter les alertes en Excel (.xlsx)",
+    description=(
+        "Applique les mêmes filtres que `GET /api/alerts/` "
+        "(status, category, priority, center, call_time_after, call_time_before, search) "
+        "et retourne un fichier Excel avec toutes les colonnes.\n\n"
+        "Les opérateurs ne voient que les alertes de leur centre."
+    ),
+    parameters=[
+        OpenApiParameter("status", OpenApiTypes.STR, description="NEW, QUALIFIED, TRANSMITTED, CLOSED ou active."),
+        OpenApiParameter("category", OpenApiTypes.STR, description="UUID, code ou nom de la catégorie."),
+        OpenApiParameter("priority", OpenApiTypes.STR, description="UUID, code ou nom de la priorité."),
+        OpenApiParameter("center", OpenApiTypes.STR, description="UUID du centre (admins uniquement)."),
+        OpenApiParameter("call_time_after", OpenApiTypes.DATETIME, description="Date de début (ISO 8601)."),
+        OpenApiParameter("call_time_before", OpenApiTypes.DATETIME, description="Date de fin (ISO 8601)."),
+        OpenApiParameter("search", OpenApiTypes.STR, description="Recherche libre (numéro, description, opérateur)."),
+    ],
+    responses={
+        200: OpenApiResponse(
+            description="Fichier Excel (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)"
+        ),
+    },
+)
+class AlertExcelExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = (
+            Alert.objects
+            .select_related(
+                "center", "channel", "category", "priority",
+                "severity", "vessel", "created_by", "notified_partner",
+            )
+            .all()
+        )
+
+        # Restriction centre pour les non-admins (cohérence avec AlertViewSet)
+        user = request.user
+        if not user.is_admin_tier:
+            qs = qs.filter(center_id=user.center_id) if user.center_id else qs.none()
+
+        # Filtres via AlertFilter
+        filterset = AlertFilter(request.GET, queryset=qs, request=request)
+        if not filterset.is_valid():
+            return Response(filterset.errors, status=status.HTTP_400_BAD_REQUEST)
+        qs = filterset.qs
+
+        # Recherche libre
+        search = request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(number__icontains=search) |
+                Q(description__icontains=search) |
+                Q(operator_signature__icontains=search)
+            )
+
+        buf = build_alerts_excel(qs)
+        filename = f"alertes_export_{timezone.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        response = HttpResponse(buf, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dashboard
+# ─────────────────────────────────────────────────────────────────────────────
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -96,15 +257,13 @@ class DashboardView(APIView):
             alerts = alerts.filter(center_id=center_id)
 
         by_category = list(
-            alerts.values("category__name").annotate(total=Count("id")).order_by("-total")
+            alerts.values("alert_type__name").annotate(total=Count("id")).order_by("-total")
         )
         by_status = list(
             alerts.values("status").annotate(total=Count("id")).order_by("-total")
         )
 
-        # "Coordinations" = alertes transmises à un partenaire (§1)
         coordinations_count = alerts.filter(notified_partner__isnull=False).count()
-        # "Sauvetages" = moyens engagés sur des alertes de la période
         rescues_count = MeansEngagement.objects.filter(alert__in=alerts).count()
 
         return Response({
@@ -114,11 +273,15 @@ class DashboardView(APIView):
             "alerts_qualified": alerts.filter(status=Alert.Status.QUALIFIED).count(),
             "coordinations_count": coordinations_count,
             "rescues_count": rescues_count,
-            "calls_received_count": alerts.count(),  # chaque alerte = 1 appel reçu à l'origine
+            "calls_received_count": alerts.count(),
             "by_category": by_category,
             "by_status": by_status,
         })
-        
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logout
+# ─────────────────────────────────────────────────────────────────────────────
 
 class LogoutView(APIView):
     """

@@ -19,13 +19,13 @@ class AlertHistorySerializer(serializers.ModelSerializer):
 
 
 class AlertListSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    alert_type_name = serializers.CharField(source="alert_type.name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
         model = Alert
         fields = [
-            "id", "number", "center", "category", "category_name", "priority",
+            "id", "number", "center", "alert_type", "alert_type_name", "priority",
             "status", "status_display", "call_time", "operator_signature",
         ]
 
@@ -37,17 +37,21 @@ class AlertDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Alert
         fields = [
-            "id", "number", "center", "call_time", "channel", "category",
+            "id", "number", "center", "call_time", "channel", "alert_type",
             "priority", "severity", "vessel", "latitude", "longitude", "position_text",
             "description", "status", "operator_signature",
             "notified_partner", "notified_at",
             "involved_people", "history",
             "created_by", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "number", "status", "created_by", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "number", "status", "created_by", "created_at", "updated_at",
+            # notified_partner et notified_at sont gérés exclusivement via l'action /transmit/
+            "notified_partner", "notified_at",
+        ]
         extra_kwargs = {
-        "center": {"required": False},
-    }
+            "center": {"required": False},
+        }
 
     def create(self, validated_data):
         people_data = validated_data.pop("involved_people", [])

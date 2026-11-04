@@ -1,0 +1,36 @@
+Bonjour,
+
+Le SGIM (Système de Gestion des Incidents Maritimes) vous notifie de la transmission de l'alerte suivante.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DÉTAILS DE L'ALERTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Numéro          : {{ alert.number }}
+Type d'incident : {{ alert.alert_type }}
+Canal           : {{ alert.channel }}
+Centre          : {{ alert.center }}
+Date / heure    : {{ alert.call_time|date:"d/m/Y H:i" }}
+Priorité        : {{ alert.priority|default:"—" }}
+Sévérité        : {{ alert.severity|default:"—" }}
+
+LOCALISATION
+Position        : {{ alert.position_text|default:"—" }}
+{% if alert.latitude and alert.longitude %}Coordonnées     : {{ alert.latitude }}, {{ alert.longitude }}{% endif %}
+Navire          : {{ alert.vessel|default:"—" }}
+
+DESCRIPTION
+{{ alert.description }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRANSMISSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Transmis à      : {{ partner.name }}
+Transmis le     : {{ transmitted_at|date:"d/m/Y H:i" }}
+Opérateur       : {{ operator }}
+{% if comment %}
+Message         : {{ comment }}
+{% endif %}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ce message est généré automatiquement par le SGIM — MRCC Abidjan / MRSC San Pedro.
+Merci de ne pas répondre directement à cet email.

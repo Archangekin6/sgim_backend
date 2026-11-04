@@ -1,0 +1,1 @@
+[SGIM] Transmission d'alerte {{ alert.number }} — {{ alert.alert_type }}

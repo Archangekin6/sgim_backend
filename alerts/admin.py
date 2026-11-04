@@ -29,10 +29,10 @@ class AlertHistoryInline(TabularInline):
 @admin.register(Alert)
 class AlertAdmin(ModelAdmin):
     list_display = (
-        "number", "center", "category", "priority", "colored_status",
+        "number", "center", "alert_type", "priority", "colored_status",
         "call_time", "operator_signature", "print_link",
     )
-    list_filter = ("status", "center", "category", "priority")
+    list_filter = ("status", "center", "alert_type", "priority")
     search_fields = ("number", "description", "operator_signature")
     readonly_fields = ("number",)
     date_hierarchy = "call_time"

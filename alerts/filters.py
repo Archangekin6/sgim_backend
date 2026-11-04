@@ -17,10 +17,10 @@ def _as_uuid(value):
 
 class AlertFilter(django_filters.FilterSet):
     """
-    status   : NEW, QUALIFIED, TRANSMITTED, CLOSED, ou "active" (= tout sauf CLOSED).
-               Plusieurs valeurs possibles, séparées par des virgules.
-    priority : UUID, code (ex: elevee) ou nom.
-    category : UUID, code (ex: surete) ou nom.
+    status     : NEW, QUALIFIED, TRANSMITTED, CLOSED, ou "active" (= tout sauf CLOSED).
+                 Plusieurs valeurs possibles, séparées par des virgules.
+    priority   : UUID, code (ex: elevee) ou nom.
+    alert_type : UUID, code (ex: surete) ou nom.
     call_time_after / call_time_before : dates ISO 8601.
     """
     status = django_filters.CharFilter(
@@ -31,9 +31,9 @@ class AlertFilter(django_filters.FilterSet):
         method="filter_priority",
         help_text="UUID, code (ex : elevee) ou nom de la priorité.",
     )
-    category = django_filters.CharFilter(
-        method="filter_category",
-        help_text="UUID, code (ex : surete) ou nom de la catégorie.",
+    alert_type = django_filters.CharFilter(
+        method="filter_alert_type",
+        help_text="UUID, code (ex : surete) ou nom du type d'alerte.",
     )
     call_time_after = django_filters.IsoDateTimeFilter(field_name="call_time", lookup_expr="gte")
     call_time_before = django_filters.IsoDateTimeFilter(field_name="call_time", lookup_expr="lte")
@@ -63,5 +63,5 @@ class AlertFilter(django_filters.FilterSet):
     def filter_priority(self, queryset, name, value):
         return self._filter_reference(queryset, "priority", value)
 
-    def filter_category(self, queryset, name, value):
-        return self._filter_reference(queryset, "category", value)
+    def filter_alert_type(self, queryset, name, value):
+        return self._filter_reference(queryset, "alert_type", value)

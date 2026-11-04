@@ -36,7 +36,7 @@ class Alert(models.Model):
 
     call_time = models.DateTimeField(help_text="Heure exacte de l'appel/signalement")
     channel = models.ForeignKey(AlertSource, on_delete=models.PROTECT, related_name="alerts")
-    category = models.ForeignKey(IncidentCategory, on_delete=models.PROTECT, related_name="alerts")
+    alert_type = models.ForeignKey(IncidentCategory, on_delete=models.PROTECT, related_name="alerts")
     priority = models.ForeignKey(Priority, on_delete=models.SET_NULL, null=True, blank=True, related_name="alerts")
     severity = models.ForeignKey(Severity, on_delete=models.SET_NULL, null=True, blank=True, related_name="alerts")
 
@@ -68,7 +68,7 @@ class Alert(models.Model):
         indexes = [models.Index(fields=["status"]), models.Index(fields=["call_time"])]
 
     def __str__(self):
-        return f"{self.number} - {self.category}"
+        return f"{self.number} - {self.alert_type}"
 
     def save(self, *args, **kwargs):
         if not self.number:

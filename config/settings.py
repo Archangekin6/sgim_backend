@@ -218,11 +218,25 @@ SPECTACULAR_SETTINGS = {
         "L'access expire au bout de 8 h : `POST /api/auth/token/refresh/`.\n\n"
         "**Listes déroulantes** : envoyer l'UUID de l'entrée choisie, jamais son libellé. "
         "Les options se lisent sous `/api/references/...`.\n\n"
+        "**Références (types d'alerte)** : les administrateurs (ADMIN / SUPERADMIN) peuvent créer, "
+        "modifier et supprimer les entrées des listes déroulantes via `POST/PUT/PATCH/DELETE` "
+        "sur `/api/references/<ressource>/`. Les opérateurs ont accès en lecture seule.\n\n"
+        "**Exports** : trois endpoints de téléchargement disponibles sous le tag *exports* :\n"
+        "- `GET /api/reports/exports/alerts/{id}/pdf/` — fiche PDF complète d'une alerte ;\n"
+        "- `GET /api/reports/daily/{id}/pdf/` — PDF du rapport journalier ;\n"
+        "- `GET /api/reports/exports/alerts/excel/` — export Excel filtrable de toutes les alertes.\n\n"
         "**Listes** : réponse paginée `{count, next, previous, results}` (25 par page). "
         "Tri avec `sort` (ex : `-created_at`), recherche avec `search`.\n\n"
+        "**Coordination** : `GET /api/coordination/` charge les alertes actives et les partenaires "
+        "pour l'onglet de transmission. Transmettre via `POST /api/alerts/{id}/transmit/` "
+        "avec `partner` (UUID) et `comment` (texte libre optionnel). "
+        "Un **email est envoyé automatiquement** à l'adresse du partenaire (configurée dans l'admin) "
+        "avec les détails complets de l'alerte et le commentaire saisi. "
+        "Si l'envoi échoue, la transmission reste enregistrée en base et un champ `email_warning` "
+        "est retourné dans la réponse.\n\n"
         "**Erreurs** : 400 données invalides, 401 non connecté, 403 rôle insuffisant, 404 introuvable."
     ),
-    'VERSION': '2.0.0',
+    'VERSION': '2.3.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'SCHEMA_PATH_PREFIX': r'/api',
     'COMPONENT_SPLIT_REQUEST': True,
@@ -243,6 +257,8 @@ SPECTACULAR_SETTINGS = {
         {'name': 'sar', 'description': 'Moyens de secours (Search And Rescue) et leur engagement sur une alerte.'},
         {'name': 'event-logs', 'description': 'Journal d\'audit automatique. Lecture seule, Admin et Super Admin.'},
         {'name': 'reports', 'description': 'Rapports de fin de journée.'},
+        {'name': 'coordination', 'description': 'Onglet Coordination : alertes actives à transmettre et liste des partenaires disponibles.'},
+        {'name': 'exports', 'description': 'Téléchargements : fiche PDF d\'alerte, PDF rapport journalier, export Excel des alertes.'},
         {'name': 'meetings', 'description': 'Comptes-rendus de réunion avec fiche de présence PDF.'},
     ],
     'ENUM_NAME_OVERRIDES': {
@@ -250,3 +266,4 @@ SPECTACULAR_SETTINGS = {
         'PasswordResetStatusEnum': 'accounts.models.PasswordResetRequest.Status',
     },
 }
+
