@@ -54,9 +54,31 @@ class AlertViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if not user.is_admin_tier:
-            qs = qs.filter(center_id=user.center_id) if user.center_id else qs.none()
-        return qs
+        if user.is_admin_tier:
+            return qs
+        # Chef de quart : voit uniquement les alertes de son quart (filtré par team sur operator_signature n'existe pas,
+        # donc on filtre par centre + on laisse le frontend filtrer par quart via ?team=)
+        if user.is_team_leader:
+            return qs.filter(center_id=user.center_id) if user.center_id else qs.none()
+        # Opérateur : voit les alertes de son centre
+        return qs.filter(center_id=user.center_id) if user.center_id else qs.none()
+
+    def get_permissions(self):
+        """
+        - Lecture seule : opérateurs, chefs de quart, admins
+        - Écriture (create/update/delete/transmit/change_status) : opérateurs et admins uniquement
+        """
+        user = self.request.user
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        # Chef de quart : lecture seule — refus sur toute écriture
+        if hasattr(user, 'is_team_leader') and user.is_authenticated and user.is_team_leader:
+            from rest_framework.permissions import BasePermission
+            class Deny(BasePermission):
+                def has_permission(self, request, view):
+                    return False
+            return [Deny()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action == "list":

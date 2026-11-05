@@ -70,6 +70,13 @@ class CoordinationView(APIView):
     def get(self, request):
         user = request.user
 
+        # Chef de quart : accès interdit à la coordination
+        if user.is_team_leader:
+            return Response(
+                {"detail": "Accès non autorisé. La coordination est réservée aux opérateurs et administrateurs."},
+                status=403,
+            )
+
         # Alertes actives (tout sauf CLOSED)
         active_statuses = [Alert.Status.NEW, Alert.Status.QUALIFIED, Alert.Status.TRANSMITTED]
         alerts_qs = (
