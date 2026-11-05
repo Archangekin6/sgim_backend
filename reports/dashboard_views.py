@@ -65,7 +65,7 @@ class AlertsTodayView(APIView):
             "date": today.isoformat(),
             "count": qs.count(),
             "by_status": status_breakdown(qs),
-            "by_category": list(qs.values("category__name").annotate(total=Count("id")).order_by("-total")),
+            "by_category": list(qs.values("alert_type__name").annotate(total=Count("id")).order_by("-total")),
         })
 
 
@@ -81,7 +81,7 @@ class IncidentsOpenView(APIView):
             "count": qs.count(),
             "high_priority_count": qs.filter(priority__level__gte=3).count(),
             "by_status": status_breakdown(qs),
-            "by_category": list(qs.values("category__name").annotate(total=Count("id")).order_by("-total")),
+            "by_category": list(qs.values("alert_type__name").annotate(total=Count("id")).order_by("-total")),
         })
 
 
