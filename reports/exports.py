@@ -299,15 +299,13 @@ def build_daily_report_pdf(report) -> BytesIO:
     # ── Statistiques ──────────────────────────────────────────────────────────
     story.extend(_section_title("Statistiques du quart", section_s))
     stats_data = [
-        ["Alertes reçues", "Sauvetages", "Coordinations", "Appels reçus"],
+        ["Alertes créées", "Coordinations"],
         [
             str(report.alerts_count),
-            str(report.rescues_count),
             str(report.coordinations_count),
-            str(report.calls_received_count),
         ],
     ]
-    st = Table(stats_data, colWidths=[4.375 * cm] * 4)
+    st = Table(stats_data, colWidths=[8.75 * cm] * 2)
     st.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
         ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),

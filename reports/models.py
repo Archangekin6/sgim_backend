@@ -17,10 +17,8 @@ class DailyReport(models.Model):
     team = models.CharField(max_length=20, help_text="Quart ayant rédigé le rapport (Car1-4/MRSC)")
 
     summary = models.TextField(help_text="Synthèse des événements des dernières 24h")
-    alerts_count = models.PositiveIntegerField(default=0)
-    rescues_count = models.PositiveIntegerField(default=0)
-    coordinations_count = models.PositiveIntegerField(default=0)
-    calls_received_count = models.PositiveIntegerField(default=0)
+    alerts_count = models.PositiveIntegerField(default=0, help_text="Calculé automatiquement à la création")
+    coordinations_count = models.PositiveIntegerField(default=0, help_text="Calculé automatiquement à la création")
 
     is_validated = models.BooleanField(default=False)
     validated_by = models.ForeignKey(

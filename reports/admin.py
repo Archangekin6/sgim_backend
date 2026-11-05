@@ -16,8 +16,9 @@ class DailyReportAdmin(ModelAdmin):
     date_hierarchy = "report_date"
 
     readonly_fields = (
-        "center", "report_date", "team", "summary", "alerts_count", "rescues_count",
-        "coordinations_count", "calls_received_count", "created_by", "created_at",
+        "center", "report_date", "team", "summary",
+        "alerts_count", "coordinations_count",
+        "created_by", "created_at",
         "is_validated", "validated_by", "validated_at", "email_sent",
     )
 

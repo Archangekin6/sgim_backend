@@ -74,15 +74,34 @@ class DailyReportViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        # Le chef de quart ne peut créer que pour son propre quart/centre
-        if user.is_team_leader:
-            serializer.save(
-                created_by=user,
-                center=user.center,
-                team=user.team,
-            )
-        else:
-            serializer.save(created_by=user)
+        center = user.center
+        team = user.team
+
+        # Calcul automatique des compteurs sur les dernières 24h pour ce centre/quart
+        from django.utils import timezone
+        from alerts.models import Alert
+        since = timezone.now() - timezone.timedelta(hours=24)
+
+        # Alertes créées par des agents de ce centre dans les dernières 24h
+        alerts_count = Alert.objects.filter(
+            center=center,
+            created_at__gte=since,
+        ).count()
+
+        # Coordinations = alertes transmises à un partenaire sur la même période
+        coordinations_count = Alert.objects.filter(
+            center=center,
+            status=Alert.Status.TRANSMITTED,
+            notified_at__gte=since,
+        ).count()
+
+        serializer.save(
+            created_by=user,
+            center=center,
+            team=team,
+            alerts_count=alerts_count,
+            coordinations_count=coordinations_count,
+        )
 
     @extend_schema(
         summary="Valider un rapport journalier",
@@ -114,12 +133,12 @@ class DailyReportViewSet(viewsets.ModelViewSet):
                 subject=f"Rapport de fin de journée - {report.center} - {report.report_date}",
                 message=(
                     f"Équipe: {report.team}\n"
-                    f"Alertes: {report.alerts_count} | Sauvetages: {report.rescues_count} | "
-                    f"Coordinations: {report.coordinations_count} | Appels: {report.calls_received_count}\n\n"
+                    f"Alertes: {report.alerts_count} | "
+                    f"Coordinations: {report.coordinations_count}\n\n"
                     f"{report.summary}"
                 ),
-                from_email=None,  # utilise DEFAULT_FROM_EMAIL
-                recipient_list=["hierarchie@sgim.example"],  # à remplacer par la vraie adresse
+                from_email=None,
+                recipient_list=["hierarchie@sgim.example"],
                 fail_silently=False,
             )
             report.email_sent = True
