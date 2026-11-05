@@ -192,11 +192,10 @@ class AlertPDFView(APIView):
             alert = (
                 Alert.objects
                 .select_related(
-                    "center", "channel", "alert_type", "priority", "severity",
-                    "vessel", "created_by", "notified_partner",
+                    "center", "channel", "alert_type", "priority",
+                    "created_by", "notified_partner",
                 )
                 .prefetch_related(
-                    "involved_people",
                     "history__user",
                     "engagements__means",
                     "engagements__engaged_by",
@@ -253,8 +252,8 @@ class AlertExcelExportView(APIView):
         qs = (
             Alert.objects
             .select_related(
-                "center", "channel", "category", "priority",
-                "severity", "vessel", "created_by", "notified_partner",
+                "center", "channel", "alert_type", "priority",
+                "created_by", "notified_partner",
             )
             .all()
         )
@@ -310,8 +309,6 @@ class DashboardView(APIView):
                 "alerts_new": serializers.IntegerField(),
                 "alerts_qualified": serializers.IntegerField(),
                 "coordinations_count": serializers.IntegerField(),
-                "rescues_count": serializers.IntegerField(),
-                "calls_received_count": serializers.IntegerField(),
                 "by_category": serializers.ListField(),
                 "by_status": serializers.ListField(),
             },
@@ -342,8 +339,6 @@ class DashboardView(APIView):
             "alerts_new": alerts.filter(status=Alert.Status.NEW).count(),
             "alerts_qualified": alerts.filter(status=Alert.Status.QUALIFIED).count(),
             "coordinations_count": coordinations_count,
-            "rescues_count": rescues_count,
-            "calls_received_count": alerts.count(),
             "by_category": by_category,
             "by_status": by_status,
         })
