@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SGIM API
-  version: 2.0.0
+  version: 2.3.0
   description: |-
     API du Système de Gestion des Incidents Maritimes (MRCC Abidjan / MRSC San Pedro).
 
@@ -9,17 +9,32 @@ info:
 
     **Listes déroulantes** : envoyer l'UUID de l'entrée choisie, jamais son libellé. Les options se lisent sous `/api/references/...`.
 
+    **Références (types d'alerte)** : les administrateurs (ADMIN / SUPERADMIN) peuvent créer, modifier et supprimer les entrées des listes déroulantes via `POST/PUT/PATCH/DELETE` sur `/api/references/<ressource>/`. Les opérateurs ont accès en lecture seule.
+
+    **Exports** : trois endpoints de téléchargement disponibles sous le tag *exports* :
+    - `GET /api/reports/exports/alerts/{id}/pdf/` — fiche PDF complète d'une alerte ;
+    - `GET /api/reports/daily/{id}/pdf/` — PDF du rapport journalier ;
+    - `GET /api/reports/exports/alerts/excel/` — export Excel filtrable de toutes les alertes.
+
     **Listes** : réponse paginée `{count, next, previous, results}` (25 par page). Tri avec `sort` (ex : `-created_at`), recherche avec `search`.
+
+    **Coordination** : `GET /api/coordination/` charge les alertes actives et les partenaires pour l'onglet de transmission. Transmettre via `POST /api/alerts/{id}/transmit/` avec `partner` (UUID) et `comment` (texte libre optionnel). Un **email est envoyé automatiquement** à l'adresse du partenaire (configurée dans l'admin) avec les détails complets de l'alerte et le commentaire saisi. Si l'envoi échoue, la transmission reste enregistrée en base et un champ `email_warning` est retourné dans la réponse.
 
     **Erreurs** : 400 données invalides, 401 non connecté, 403 rôle insuffisant, 404 introuvable.
 paths:
   /api/alerts/:
     get:
       operationId: alerts_list
-      description: 'Liste paginée. Filtres : status, priority, category, center, channel,
-        vessel, call_time_after, call_time_before. Recherche : search. Tri : sort.'
+      description: 'Liste paginée. Filtres : status, priority, alert_type, center,
+        channel, vessel, call_time_after, call_time_before. Recherche : search. Tri
+        : sort.'
       summary: Lister les alertes
       parameters:
+      - in: query
+        name: alert_type
+        schema:
+          type: string
+        description: 'UUID, code (ex : surete) ou nom du type d''alerte.'
       - in: query
         name: call_time_after
         schema:
@@ -30,11 +45,6 @@ paths:
         schema:
           type: string
           format: date-time
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: 'UUID, code (ex : surete) ou nom de la catégorie.'
       - in: query
         name: center
         schema:
@@ -91,10 +101,18 @@ paths:
           description: ''
     post:
       operationId: alerts_create
-      description: Formulaire « Nouvelle Alerte ». Les champs channel, category, priority,
-        severity attendent l'UUID de la liste déroulante. Le numéro, le statut NEW
-        et le créateur sont générés par le serveur. Si `center` est omis, le centre
-        du compte connecté est utilisé.
+      description: |-
+        Formulaire « Nouvelle Alerte ».
+
+        Champs obligatoires : `call_time`, `channel` (canal de réception — UUID de AlertSource), `alert_type` (type d'incident — UUID de IncidentCategory), `description`, `operator_signature`.
+
+        Champs optionnels : `priority`, `severity`, `vessel`, `latitude`, `longitude`, `position_text`, `involved_people`.
+
+        Champs auto-générés par le serveur : `number` (ex: ALT-ABJ-2026-0001), `status` (NEW), `created_by`.
+
+        Si `center` est omis, le centre du compte connecté est utilisé.
+
+        Le partenaire notifié (`notified_partner`) se renseigne uniquement via l'action `POST /{id}/transmit/`.
       summary: Créer une alerte
       tags:
       - alerts
@@ -266,8 +284,18 @@ paths:
   /api/alerts/{id}/transmit/:
     post:
       operationId: alerts_transmit_create
-      description: Enregistre le partenaire notifié et l'heure exacte de transmission
-        (valeur légale).
+      description: |-
+        Enregistre le partenaire notifié, l'heure exacte de transmission (valeur légale) et envoie automatiquement un **email au partenaire** avec les détails complets de l'alerte.
+
+        **Payload :**
+        - `partner` (UUID, obligatoire) : identifiant du partenaire à notifier — récupérer la liste via `GET /api/coordination/`.
+        - `comment` (texte, optionnel) : message de transmission libre, inclus dans l'email et enregistré dans l'historique de l'alerte.
+
+        **Réponse :**
+        - `200` : alerte mise à jour. Si l'email a échoué, un champ `email_warning` est présent dans la réponse (la transmission en base reste valide).
+        - `400` : partenaire inconnu.
+
+        **Note :** si le partenaire n'a pas d'adresse email configurée, la transmission en base est effectuée sans envoi d'email.
       summary: Transmettre une alerte à un partenaire
       parameters:
       - in: path
@@ -597,6 +625,35 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/coordination/:
+    get:
+      operationId: coordination_retrieve
+      description: |-
+        Retourne en une seule requête :
+
+        - **`active_alerts`** : alertes avec statut NEW, QUALIFIED ou TRANSMITTED, filtrées par centre pour les opérateurs.
+        - **`partners`** : liste des partenaires actifs disponibles à notifier.
+
+        **Pour transmettre une alerte**, utiliser `POST /api/alerts/{id}/transmit/` avec le payload suivant :
+        ```json
+        {
+          "partner": "<uuid_partenaire>",
+          "comment": "Message de transmission (optionnel)"
+        }
+        ```
+        Le `comment` est enregistré dans l'historique de l'alerte.
+      summary: Données de l'onglet Coordination
+      tags:
+      - coordination
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoordinationResponse'
+          description: ''
   /api/dashboard/alerts-today/:
     get:
       operationId: dashboard_alerts_today_retrieve
@@ -1289,6 +1346,9 @@ paths:
   /api/references/alert-sources/:
     get:
       operationId: references_alert_sources_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les sources d'alerte
       parameters:
       - name: page
         required: false
@@ -1309,7 +1369,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1319,9 +1379,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedAlertSourceList'
           description: ''
+    post:
+      operationId: references_alert_sources_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) source d'alerte
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertSourceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertSourceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertSourceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSource'
+          description: ''
   /api/references/alert-sources/{id}/:
     get:
       operationId: references_alert_sources_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) source d'alerte
       parameters:
       - in: path
         name: id
@@ -1331,7 +1423,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) alert source.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1341,9 +1433,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/AlertSource'
           description: ''
+    put:
+      operationId: references_alert_sources_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) source d'alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert source.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertSourceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertSourceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertSourceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSource'
+          description: ''
+    patch:
+      operationId: references_alert_sources_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) source d'alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert source.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAlertSourceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAlertSourceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAlertSourceRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSource'
+          description: ''
+    delete:
+      operationId: references_alert_sources_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) source d'alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) alert source.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/incident-categories/:
     get:
       operationId: references_incident_categories_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les catégories d'incident
       parameters:
       - name: page
         required: false
@@ -1364,7 +1547,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1374,9 +1557,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedIncidentCategoryList'
           description: ''
+    post:
+      operationId: references_incident_categories_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) catégorie d'incident
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IncidentCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IncidentCategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentCategory'
+          description: ''
   /api/references/incident-categories/{id}/:
     get:
       operationId: references_incident_categories_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) catégorie d'incident
       parameters:
       - in: path
         name: id
@@ -1386,7 +1601,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) incident category.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1396,9 +1611,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/IncidentCategory'
           description: ''
+    put:
+      operationId: references_incident_categories_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) catégorie d'incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) incident category.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IncidentCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IncidentCategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentCategory'
+          description: ''
+    patch:
+      operationId: references_incident_categories_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) catégorie d'incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) incident category.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedIncidentCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedIncidentCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedIncidentCategoryRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentCategory'
+          description: ''
+    delete:
+      operationId: references_incident_categories_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) catégorie d'incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) incident category.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/means-categories/:
     get:
       operationId: references_means_categories_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les catégories de moyen
       parameters:
       - name: page
         required: false
@@ -1419,7 +1725,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1429,9 +1735,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedMeansCategoryList'
           description: ''
+    post:
+      operationId: references_means_categories_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) catégorie de moyen
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansCategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansCategory'
+          description: ''
   /api/references/means-categories/{id}/:
     get:
       operationId: references_means_categories_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) catégorie de moyen
       parameters:
       - in: path
         name: id
@@ -1441,7 +1779,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) means category.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1451,9 +1789,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/MeansCategory'
           description: ''
+    put:
+      operationId: references_means_categories_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) catégorie de moyen
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means category.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansCategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansCategory'
+          description: ''
+    patch:
+      operationId: references_means_categories_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) catégorie de moyen
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means category.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansCategoryRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansCategory'
+          description: ''
+    delete:
+      operationId: references_means_categories_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) catégorie de moyen
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means category.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/means-types/:
     get:
       operationId: references_means_types_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les types de moyen
       parameters:
       - in: query
         name: category
@@ -1479,7 +1908,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1489,9 +1918,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedMeansTypeList'
           description: ''
+    post:
+      operationId: references_means_types_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) type de moyen
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansTypeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansType'
+          description: ''
   /api/references/means-types/{id}/:
     get:
       operationId: references_means_types_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) type de moyen
       parameters:
       - in: path
         name: id
@@ -1501,7 +1962,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) means type.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1511,9 +1972,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/MeansType'
           description: ''
+    put:
+      operationId: references_means_types_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) type de moyen
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means type.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeansTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MeansTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MeansTypeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansType'
+          description: ''
+    patch:
+      operationId: references_means_types_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) type de moyen
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means type.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeansTypeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeansType'
+          description: ''
+    delete:
+      operationId: references_means_types_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) type de moyen
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) means type.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/partner-types/:
     get:
       operationId: references_partner_types_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les types de partenaire
       parameters:
       - name: page
         required: false
@@ -1534,7 +2086,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1544,9 +2096,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPartnerTypeList'
           description: ''
+    post:
+      operationId: references_partner_types_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) type de partenaire
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerTypeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerType'
+          description: ''
   /api/references/partner-types/{id}/:
     get:
       operationId: references_partner_types_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) type de partenaire
       parameters:
       - in: path
         name: id
@@ -1556,7 +2140,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) partner type.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1566,9 +2150,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/PartnerType'
           description: ''
+    put:
+      operationId: references_partner_types_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) type de partenaire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner type.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerTypeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerType'
+          description: ''
+    patch:
+      operationId: references_partner_types_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) type de partenaire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner type.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerTypeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerType'
+          description: ''
+    delete:
+      operationId: references_partner_types_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) type de partenaire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) partner type.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/person-roles/:
     get:
       operationId: references_person_roles_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les rôles de personne
       parameters:
       - name: page
         required: false
@@ -1589,7 +2264,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1599,9 +2274,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPersonRoleList'
           description: ''
+    post:
+      operationId: references_person_roles_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) rôle de personne
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonRoleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonRoleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonRoleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonRole'
+          description: ''
   /api/references/person-roles/{id}/:
     get:
       operationId: references_person_roles_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) rôle de personne
       parameters:
       - in: path
         name: id
@@ -1611,7 +2318,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) person role.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1621,9 +2328,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonRole'
           description: ''
+    put:
+      operationId: references_person_roles_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) rôle de personne
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person role.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonRoleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonRoleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonRoleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonRole'
+          description: ''
+    patch:
+      operationId: references_person_roles_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) rôle de personne
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person role.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonRoleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonRoleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonRoleRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonRole'
+          description: ''
+    delete:
+      operationId: references_person_roles_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) rôle de personne
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person role.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/person-statuses/:
     get:
       operationId: references_person_statuses_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les statuts de personne
       parameters:
       - name: page
         required: false
@@ -1644,7 +2442,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1654,9 +2452,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPersonStatusList'
           description: ''
+    post:
+      operationId: references_person_statuses_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) statut de personne
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatus'
+          description: ''
   /api/references/person-statuses/{id}/:
     get:
       operationId: references_person_statuses_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) statut de personne
       parameters:
       - in: path
         name: id
@@ -1666,7 +2496,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) person status.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1676,9 +2506,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonStatus'
           description: ''
+    put:
+      operationId: references_person_statuses_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) statut de personne
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person status.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatus'
+          description: ''
+    patch:
+      operationId: references_person_statuses_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) statut de personne
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person status.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPersonStatusRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatus'
+          description: ''
+    delete:
+      operationId: references_person_statuses_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) statut de personne
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) person status.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/priorities/:
     get:
       operationId: references_priorities_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les priorités
       parameters:
       - name: page
         required: false
@@ -1699,7 +2620,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1709,9 +2630,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPriorityList'
           description: ''
+    post:
+      operationId: references_priorities_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) priorité
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriorityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PriorityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PriorityRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Priority'
+          description: ''
   /api/references/priorities/{id}/:
     get:
       operationId: references_priorities_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) priorité
       parameters:
       - in: path
         name: id
@@ -1721,7 +2674,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) priority.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1731,9 +2684,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/Priority'
           description: ''
+    put:
+      operationId: references_priorities_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) priorité
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) priority.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriorityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PriorityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PriorityRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Priority'
+          description: ''
+    patch:
+      operationId: references_priorities_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) priorité
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) priority.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPriorityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPriorityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPriorityRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Priority'
+          description: ''
+    delete:
+      operationId: references_priorities_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) priorité
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) priority.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/severities/:
     get:
       operationId: references_severities_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les sévérités
       parameters:
       - name: page
         required: false
@@ -1754,7 +2798,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1764,9 +2808,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSeverityList'
           description: ''
+    post:
+      operationId: references_severities_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) sévérité
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeverityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SeverityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SeverityRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Severity'
+          description: ''
   /api/references/severities/{id}/:
     get:
       operationId: references_severities_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) sévérité
       parameters:
       - in: path
         name: id
@@ -1776,7 +2852,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) severity.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1786,9 +2862,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/Severity'
           description: ''
+    put:
+      operationId: references_severities_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) sévérité
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) severity.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeverityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SeverityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SeverityRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Severity'
+          description: ''
+    patch:
+      operationId: references_severities_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) sévérité
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) severity.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSeverityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSeverityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSeverityRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Severity'
+          description: ''
+    delete:
+      operationId: references_severities_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) sévérité
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) severity.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/references/vessel-types/:
     get:
       operationId: references_vessel_types_list
+      description: Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true`
+        pour inclure les entrées désactivées.
+      summary: Lister les types de navire
       parameters:
       - name: page
         required: false
@@ -1809,7 +2976,7 @@ paths:
         schema:
           type: string
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1819,9 +2986,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedVesselTypeList'
           description: ''
+    post:
+      operationId: references_vessel_types_create
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN). Le champ `code`
+        est généré automatiquement depuis le `name` (slug).
+      summary: Créer un(e) type de navire
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VesselTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VesselTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VesselTypeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselType'
+          description: ''
   /api/references/vessel-types/{id}/:
     get:
       operationId: references_vessel_types_retrieve
+      description: |-
+        Lecture (GET) : tout utilisateur authentifié.
+        Écriture (POST / PUT / PATCH / DELETE) : administrateurs uniquement.
+      summary: Détail d'un(e) type de navire
       parameters:
       - in: path
         name: id
@@ -1831,7 +3030,7 @@ paths:
         description: Un(une) Chaîne UUID identifiant ce(cette) vessel type.
         required: true
       tags:
-      - references
+      - Références
       security:
       - jwtAuth: []
       responses:
@@ -1841,9 +3040,98 @@ paths:
               schema:
                 $ref: '#/components/schemas/VesselType'
           description: ''
+    put:
+      operationId: references_vessel_types_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Remplacer un(e) type de navire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel type.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VesselTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VesselTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VesselTypeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselType'
+          description: ''
+    patch:
+      operationId: references_vessel_types_partial_update
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Modifier partiellement un(e) type de navire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel type.
+        required: true
+      tags:
+      - Références
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVesselTypeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVesselTypeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVesselTypeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselType'
+          description: ''
+    delete:
+      operationId: references_vessel_types_destroy
+      description: ⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN).
+      summary: Supprimer un(e) type de navire
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) vessel type.
+        required: true
+      tags:
+      - Références
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/reports/daily/:
     get:
       operationId: reports_daily_list
+      summary: Lister les rapports journaliers
       parameters:
       - in: query
         name: center
@@ -1888,6 +3176,7 @@ paths:
           description: ''
     post:
       operationId: reports_daily_create
+      summary: Créer un rapport journalier
       tags:
       - reports
       requestBody:
@@ -1914,6 +3203,7 @@ paths:
   /api/reports/daily/{id}/:
     get:
       operationId: reports_daily_retrieve
+      summary: Détail d'un rapport journalier
       parameters:
       - in: path
         name: id
@@ -1935,6 +3225,7 @@ paths:
           description: ''
     put:
       operationId: reports_daily_update
+      summary: Remplacer un rapport journalier
       parameters:
       - in: path
         name: id
@@ -1968,6 +3259,7 @@ paths:
           description: ''
     patch:
       operationId: reports_daily_partial_update
+      summary: Modifier partiellement un rapport journalier
       parameters:
       - in: path
         name: id
@@ -2000,6 +3292,7 @@ paths:
           description: ''
     delete:
       operationId: reports_daily_destroy
+      summary: Supprimer un rapport journalier
       parameters:
       - in: path
         name: id
@@ -2015,11 +3308,32 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/reports/daily/{id}/pdf/:
+    get:
+      operationId: reports_daily_pdf_retrieve
+      description: Génère et retourne la fiche PDF du rapport (A4, mise en page officielle
+        SGIM).
+      summary: Télécharger le PDF d'un rapport journalier
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un(une) Chaîne UUID identifiant ce(cette) daily report.
+        required: true
+      tags:
+      - exports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Fichier PDF (application/pdf)
   /api/reports/daily/{id}/validate/:
     post:
       operationId: reports_daily_validate_create
-      description: Validation par le chef de quart -> déclenche l'envoi email (§6
-        spec v2).
+      description: Marque le rapport comme validé et envoie un e-mail à la hiérarchie.
+      summary: Valider un rapport journalier
       parameters:
       - in: path
         name: id
@@ -2030,18 +3344,6 @@ paths:
         required: true
       tags:
       - reports
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DailyReportRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DailyReportRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/DailyReportRequest'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -2079,6 +3381,82 @@ paths:
               schema:
                 $ref: '#/components/schemas/GlobalDashboardResponse'
           description: ''
+  /api/reports/exports/alerts/{id}/pdf/:
+    get:
+      operationId: reports_exports_alerts_pdf_retrieve
+      description: 'Génère la fiche complète d''une alerte au format PDF (A4) : informations
+        générales, localisation, personnes impliquées, moyens engagés et historique
+        des statuts.'
+      summary: Télécharger le PDF d'une alerte
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - exports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Fichier PDF (application/pdf)
+        '404':
+          description: Alerte introuvable.
+  /api/reports/exports/alerts/excel/:
+    get:
+      operationId: reports_exports_alerts_excel_retrieve
+      description: |-
+        Applique les mêmes filtres que `GET /api/alerts/` (status, category, priority, center, call_time_after, call_time_before, search) et retourne un fichier Excel avec toutes les colonnes.
+
+        Les opérateurs ne voient que les alertes de leur centre.
+      summary: Exporter les alertes en Excel (.xlsx)
+      parameters:
+      - in: query
+        name: call_time_after
+        schema:
+          type: string
+          format: date-time
+        description: Date de début (ISO 8601).
+      - in: query
+        name: call_time_before
+        schema:
+          type: string
+          format: date-time
+        description: Date de fin (ISO 8601).
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: UUID, code ou nom de la catégorie.
+      - in: query
+        name: center
+        schema:
+          type: string
+        description: UUID du centre (admins uniquement).
+      - in: query
+        name: priority
+        schema:
+          type: string
+        description: UUID, code ou nom de la priorité.
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Recherche libre (numéro, description, opérateur).
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: NEW, QUALIFIED, TRANSMITTED, CLOSED ou active.
+      tags:
+      - exports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Fichier Excel (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
   /api/sar/:
     get:
       operationId: sar_list
@@ -2977,6 +4355,61 @@ components:
         * `TRANSMIT` - Transmission partenaire
         * `ENGAGEMENT` - Engagement de moyen
         * `LOGIN` - Connexion
+    ActiveAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        number:
+          type: string
+          readOnly: true
+        call_time:
+          type: string
+          format: date-time
+          description: Heure exacte de l'appel/signalement
+        alert_type:
+          type: string
+          format: uuid
+        alert_type_name:
+          type: string
+          readOnly: true
+        center:
+          type: integer
+        center_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/AlertStatusEnum'
+        status_display:
+          type: string
+          readOnly: true
+        description:
+          type: string
+        operator_signature:
+          type: string
+          description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
+          maxLength: 100
+        notified_partner:
+          type: string
+          format: uuid
+          nullable: true
+        notified_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - alert_type
+      - alert_type_name
+      - call_time
+      - center
+      - center_name
+      - description
+      - id
+      - number
+      - operator_signature
+      - status_display
     AlertDetail:
       type: object
       properties:
@@ -2996,7 +4429,7 @@ components:
         channel:
           type: string
           format: uuid
-        category:
+        alert_type:
           type: string
           format: uuid
         priority:
@@ -3037,10 +4470,12 @@ components:
         notified_partner:
           type: string
           format: uuid
+          readOnly: true
           nullable: true
         notified_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
         involved_people:
           type: array
@@ -3064,14 +4499,16 @@ components:
           format: date-time
           readOnly: true
       required:
+      - alert_type
       - call_time
-      - category
       - channel
       - created_at
       - created_by
       - description
       - history
       - id
+      - notified_at
+      - notified_partner
       - number
       - operator_signature
       - status
@@ -3088,7 +4525,7 @@ components:
         channel:
           type: string
           format: uuid
-        category:
+        alert_type:
           type: string
           format: uuid
         priority:
@@ -3124,21 +4561,13 @@ components:
           minLength: 1
           description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
           maxLength: 100
-        notified_partner:
-          type: string
-          format: uuid
-          nullable: true
-        notified_at:
-          type: string
-          format: date-time
-          nullable: true
         involved_people:
           type: array
           items:
             $ref: '#/components/schemas/AlertPersonRequest'
       required:
+      - alert_type
       - call_time
-      - category
       - channel
       - description
       - operator_signature
@@ -3190,10 +4619,10 @@ components:
           readOnly: true
         center:
           type: integer
-        category:
+        alert_type:
           type: string
           format: uuid
-        category_name:
+        alert_type_name:
           type: string
           readOnly: true
         priority:
@@ -3214,9 +4643,9 @@ components:
           description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
           maxLength: 100
       required:
+      - alert_type
+      - alert_type_name
       - call_time
-      - category
-      - category_name
       - center
       - id
       - number
@@ -3264,12 +4693,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -3281,7 +4707,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    AlertSourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
     AlertStatusEnum:
       enum:
@@ -3435,6 +4878,54 @@ components:
           type: string
       required:
       - status
+    CoordinationPartner:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        partner_type:
+          type: string
+          format: uuid
+        partner_type_name:
+          type: string
+          readOnly: true
+        phone:
+          type: string
+          maxLength: 30
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        coverage_area:
+          type: string
+          maxLength: 200
+      required:
+      - id
+      - name
+      - partner_type
+      - partner_type_name
+    CoordinationResponse:
+      type: object
+      properties:
+        active_alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiveAlert'
+        partners:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoordinationPartner'
+      required:
+      - active_alerts
+      - partners
     DailyReport:
       type: object
       properties:
@@ -3667,12 +5158,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -3684,7 +5172,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    IncidentCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
     IncidentsOpen:
       type: object
@@ -3768,12 +5273,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -3785,7 +5287,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    MeansCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
     MeansEngagement:
       type: object
@@ -3889,12 +5408,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -3910,7 +5426,28 @@ components:
           format: uuid
           nullable: true
       required:
+      - code
       - id
+      - name
+    MeansTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        category:
+          type: string
+          format: uuid
+          nullable: true
+      required:
       - name
     Meeting:
       type: object
@@ -4577,12 +6114,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -4594,7 +6128,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    PartnerTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
     PasswordResetRequest:
       type: object
@@ -4677,7 +6228,7 @@ components:
         channel:
           type: string
           format: uuid
-        category:
+        alert_type:
           type: string
           format: uuid
         priority:
@@ -4713,18 +6264,24 @@ components:
           minLength: 1
           description: Nom de famille de l'opérateur (saisie manuelle obligatoire)
           maxLength: 100
-        notified_partner:
-          type: string
-          format: uuid
-          nullable: true
-        notified_at:
-          type: string
-          format: date-time
-          nullable: true
         involved_people:
           type: array
           items:
             $ref: '#/components/schemas/AlertPersonRequest'
+    PatchedAlertSourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
     PatchedCenterRequest:
       type: object
       properties:
@@ -4785,6 +6342,34 @@ components:
           format: int64
         center:
           type: integer
+    PatchedIncidentCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+    PatchedMeansCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
     PatchedMeansEngagementRequest:
       type: object
       properties:
@@ -4825,6 +6410,24 @@ components:
           type: integer
           nullable: true
         partner:
+          type: string
+          format: uuid
+          nullable: true
+    PatchedMeansTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        category:
           type: string
           format: uuid
           nullable: true
@@ -4874,6 +6477,20 @@ components:
         partner_type:
           type: string
           format: uuid
+    PatchedPartnerTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
     PatchedPersonRequest:
       type: object
       properties:
@@ -4911,6 +6528,72 @@ components:
         status:
           type: string
           format: uuid
+    PatchedPersonRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+    PatchedPersonStatusRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+    PatchedPriorityRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+    PatchedSeverityRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
     PatchedUserRequest:
       type: object
       properties:
@@ -4995,6 +6678,20 @@ components:
           type: string
           format: uuid
           nullable: true
+    PatchedVesselTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
     Person:
       type: object
       properties:
@@ -5108,12 +6805,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -5125,7 +6819,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    PersonRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
     PersonStatus:
       type: object
@@ -5135,12 +6846,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -5152,7 +6860,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    PersonStatusRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
     PersonnelAvailable:
       type: object
@@ -5183,12 +6908,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -5205,7 +6927,29 @@ components:
           minimum: 0
           format: int64
       required:
+      - code
       - id
+      - name
+    PriorityRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
       - name
     ResolvePasswordResetRequest:
       type: object
@@ -5242,12 +6986,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -5264,7 +7005,29 @@ components:
           minimum: 0
           format: int64
       required:
+      - code
       - id
+      - name
+    SeverityRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
       - name
     SexEnum:
       enum:
@@ -5628,12 +7391,9 @@ components:
           format: uuid
           readOnly: true
         code:
-          oneOf:
-          - type: string
-            maxLength: 80
-            pattern: ^[-a-zA-Z0-9_]+$
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 150
@@ -5645,7 +7405,24 @@ components:
         is_active:
           type: boolean
       required:
+      - code
       - id
+      - name
+    VesselTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
       - name
   securitySchemes:
     jwtAuth:
@@ -5677,5 +7454,11 @@ tags:
   description: Journal d'audit automatique. Lecture seule, Admin et Super Admin.
 - name: reports
   description: Rapports de fin de journée.
+- name: coordination
+  description: 'Onglet Coordination : alertes actives à transmettre et liste des partenaires
+    disponibles.'
+- name: exports
+  description: 'Téléchargements : fiche PDF d''alerte, PDF rapport journalier, export
+    Excel des alertes.'
 - name: meetings
   description: Comptes-rendus de réunion avec fiche de présence PDF.
