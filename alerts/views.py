@@ -22,7 +22,7 @@ from .serializers import (
 @extend_schema_view(
     list=extend_schema(
         summary="Lister les alertes",
-        description="Liste paginée. Filtres : status, priority, alert_type, center, channel, vessel, "
+        description="Liste paginée. Filtres : status, priority, alert_type, center, channel, "
                     "call_time_after, call_time_before. Recherche : search. Tri : sort.",
     ),
     create=extend_schema(
@@ -31,10 +31,10 @@ from .serializers import (
             "Formulaire « Nouvelle Alerte ».\n\n"
             "Champs obligatoires : `call_time`, `channel` (canal de réception — UUID de AlertSource), "
             "`alert_type` (type d'incident — UUID de IncidentCategory), `description`, `operator_signature`.\n\n"
-            "Champs optionnels : `priority`, `severity`, `vessel`, `latitude`, `longitude`, `position_text`, `involved_people`.\n\n"
+            "Champs optionnels : `priority` (UUID de Priority), `latitude`, `longitude`.\n\n"
             "Champs auto-générés par le serveur : `number` (ex: ALT-ABJ-2026-0001), `status` (NEW), `created_by`.\n\n"
             "Si `center` est omis, le centre du compte connecté est utilisé.\n\n"
-            "Le partenaire notifié (`notified_partner`) se renseigne uniquement via l'action `POST /{id}/transmit/`."
+            "Le partenaire notifié (`notified_partner`) se renseigne uniquement via `POST /{id}/transmit/`."
         ),
     ),
     retrieve=extend_schema(summary="Détail d'une alerte (personnes et historique inclus)"),
@@ -44,8 +44,8 @@ from .serializers import (
 )
 class AlertViewSet(viewsets.ModelViewSet):
     queryset = Alert.objects.select_related(
-        "center", "channel", "alert_type", "priority", "severity", "vessel", "created_by", "notified_partner"
-    ).prefetch_related("involved_people", "history").all()
+        "center", "channel", "alert_type", "priority", "created_by", "notified_partner"
+    ).prefetch_related("history").all()
     permission_classes = [IsAuthenticated]
     filterset_class = AlertFilter
     ordering_fields = ["call_time", "created_at", "status", "number", "priority__level"]

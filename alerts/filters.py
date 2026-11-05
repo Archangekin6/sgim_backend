@@ -40,7 +40,7 @@ class AlertFilter(django_filters.FilterSet):
 
     class Meta:
         model = Alert
-        fields = ["center", "channel", "vessel"]
+        fields = ["center", "channel"]
 
     def filter_status(self, queryset, name, value):
         wanted = []

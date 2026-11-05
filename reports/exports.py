@@ -138,8 +138,7 @@ def _info_table(rows, col_widths=(5.5 * cm, 12 * cm)):
 def build_alert_pdf(alert) -> BytesIO:
     """
     Génère la fiche complète d'une alerte au format PDF (A4).
-    Inclut : infos générales, localisation, personnes impliquées,
-             moyens engagés, historique des statuts.
+    Inclut : infos générales, localisation, moyens engagés, historique des statuts.
     """
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -168,7 +167,6 @@ def build_alert_pdf(alert) -> BytesIO:
         ("Canal (source)", str(alert.channel)),
         ("Type d'alerte", str(alert.alert_type)),
         ("Priorité", str(alert.priority) if alert.priority else "--"),
-        ("Sévérité", str(alert.severity) if alert.severity else "--"),
         ("Opérateur", alert.operator_signature),
         ("Créé par", str(alert.created_by)),
         ("Créé le", _fmt_dt(alert.created_at)),
@@ -183,10 +181,8 @@ def build_alert_pdf(alert) -> BytesIO:
     # ── Localisation ──────────────────────────────────────────────────────────
     story.extend(_section_title("Localisation", section_s))
     story.append(_info_table([
-        ("Navire", str(alert.vessel) if alert.vessel else "--"),
         ("Latitude", str(alert.latitude) if alert.latitude else "--"),
         ("Longitude", str(alert.longitude) if alert.longitude else "--"),
-        ("Position (texte)", alert.position_text or "--"),
     ]))
     story.append(Spacer(1, 0.3 * cm))
 
@@ -197,32 +193,6 @@ def build_alert_pdf(alert) -> BytesIO:
             ("Partenaire", str(alert.notified_partner)),
             ("Notifié le", _fmt_dt(alert.notified_at)),
         ]))
-        story.append(Spacer(1, 0.3 * cm))
-
-    # ── Personnes impliquées ───────────────────────────────────────────────────
-    people = list(alert.involved_people.all())
-    if people:
-        story.extend(_section_title(f"Personnes impliquées ({len(people)})", section_s))
-        headers = [["Nom", "Nationalité", "Victime", "Note"]]
-        rows = [[
-            p.name or "--",
-            p.nationality or "--",
-            "Oui" if p.is_victim else "Non",
-            p.status_note or "--",
-        ] for p in people]
-        pt = Table(headers + rows, colWidths=[4 * cm, 3.5 * cm, 2 * cm, 8 * cm])
-        pt.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-            ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#BDC3C7")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, LIGHT_BLUE]),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        story.append(pt)
         story.append(Spacer(1, 0.3 * cm))
 
     # ── Moyens engagés ────────────────────────────────────────────────────────
@@ -390,24 +360,21 @@ def build_daily_report_pdf(report) -> BytesIO:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ALERT_COLUMNS = [
-    ("Numéro",           lambda a: a.number),
-    ("Statut",           lambda a: a.get_status_display()),
-    ("Centre",           lambda a: str(a.center)),
+    ("Numéro",             lambda a: a.number),
+    ("Statut",             lambda a: a.get_status_display()),
+    ("Centre",             lambda a: str(a.center)),
     ("Date / heure appel", lambda a: localtime(a.call_time).replace(tzinfo=None) if a.call_time else None),
-    ("Canal",            lambda a: str(a.channel)),
-    ("Type d'alerte",    lambda a: str(a.alert_type)),
-    ("Priorité",         lambda a: str(a.priority) if a.priority else ""),
-    ("Sévérité",         lambda a: str(a.severity) if a.severity else ""),
-    ("Navire",           lambda a: str(a.vessel) if a.vessel else ""),
-    ("Latitude",         lambda a: float(a.latitude) if a.latitude else None),
-    ("Longitude",        lambda a: float(a.longitude) if a.longitude else None),
-    ("Position (texte)", lambda a: a.position_text),
-    ("Description",      lambda a: a.description),
-    ("Opérateur",        lambda a: a.operator_signature),
+    ("Canal",              lambda a: str(a.channel)),
+    ("Type d'alerte",      lambda a: str(a.alert_type)),
+    ("Priorité",           lambda a: str(a.priority) if a.priority else ""),
+    ("Latitude",           lambda a: float(a.latitude) if a.latitude else None),
+    ("Longitude",          lambda a: float(a.longitude) if a.longitude else None),
+    ("Description",        lambda a: a.description),
+    ("Opérateur",          lambda a: a.operator_signature),
     ("Partenaire notifié", lambda a: str(a.notified_partner) if a.notified_partner else ""),
-    ("Notifié le",       lambda a: localtime(a.notified_at).replace(tzinfo=None) if a.notified_at else None),
-    ("Créé par",         lambda a: str(a.created_by)),
-    ("Créé le",          lambda a: localtime(a.created_at).replace(tzinfo=None) if a.created_at else None),
+    ("Notifié le",         lambda a: localtime(a.notified_at).replace(tzinfo=None) if a.notified_at else None),
+    ("Créé par",           lambda a: str(a.created_by)),
+    ("Créé le",            lambda a: localtime(a.created_at).replace(tzinfo=None) if a.created_at else None),
 ]
 
 
@@ -439,7 +406,7 @@ def build_alerts_excel(queryset) -> BytesIO:
                 cell.fill = fill
 
     # ── Largeurs automatiques ─────────────────────────────────────────────────
-    col_widths = [20, 14, 18, 20, 16, 22, 12, 12, 20, 12, 12, 24, 40, 20, 22, 20, 22, 20]
+    col_widths = [20, 14, 18, 20, 16, 22, 12, 12, 12, 40, 20, 22, 20, 22, 20]
     for i, width in enumerate(col_widths, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 

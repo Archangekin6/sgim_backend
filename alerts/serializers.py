@@ -1,12 +1,5 @@
 from rest_framework import serializers
-from .models import Alert, AlertHistory, AlertPerson
-
-
-class AlertPersonSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AlertPerson
-        fields = ["id", "name", "nationality", "is_victim", "status_note"]
-        read_only_fields = ["id"]
+from .models import Alert, AlertHistory
 
 
 class AlertHistorySerializer(serializers.ModelSerializer):
@@ -31,22 +24,21 @@ class AlertListSerializer(serializers.ModelSerializer):
 
 
 class AlertDetailSerializer(serializers.ModelSerializer):
-    involved_people = AlertPersonSerializer(many=True, required=False)
     history = AlertHistorySerializer(many=True, read_only=True)
 
     class Meta:
         model = Alert
         fields = [
             "id", "number", "center", "call_time", "channel", "alert_type",
-            "priority", "severity", "vessel", "latitude", "longitude", "position_text",
+            "priority", "latitude", "longitude",
             "description", "status", "operator_signature",
             "notified_partner", "notified_at",
-            "involved_people", "history",
+            "history",
             "created_by", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "number", "status", "created_by", "created_at", "updated_at",
-            # notified_partner et notified_at sont gérés exclusivement via l'action /transmit/
+            # notified_partner et notified_at gérés exclusivement via /transmit/
             "notified_partner", "notified_at",
         ]
         extra_kwargs = {
@@ -54,7 +46,6 @@ class AlertDetailSerializer(serializers.ModelSerializer):
         }
 
     def create(self, validated_data):
-        people_data = validated_data.pop("involved_people", [])
         request_user = self.context["request"].user
 
         center = validated_data.get("center") or request_user.center
@@ -65,20 +56,12 @@ class AlertDetailSerializer(serializers.ModelSerializer):
         validated_data["center"] = center
         validated_data["created_by"] = request_user
 
-        alert = Alert.objects.create(**validated_data)
-        for person_data in people_data:
-            AlertPerson.objects.create(alert=alert, **person_data)
-        return alert  
+        return Alert.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
-        people_data = validated_data.pop("involved_people", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        if people_data is not None:
-            instance.involved_people.all().delete()
-            for person_data in people_data:
-                AlertPerson.objects.create(alert=instance, **person_data)
         return instance
 
 

@@ -4,7 +4,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 
-from .models import Alert, AlertHistory, AlertPerson
+from .models import Alert, AlertHistory
 
 STATUS_COLORS = {
     "NEW": "#B5651D",
@@ -12,11 +12,6 @@ STATUS_COLORS = {
     "TRANSMITTED": "#1B6E8C",
     "CLOSED": "#1E7A4C",
 }
-
-
-class AlertPersonInline(TabularInline):
-    model = AlertPerson
-    extra = 0
 
 
 class AlertHistoryInline(TabularInline):
@@ -37,7 +32,7 @@ class AlertAdmin(ModelAdmin):
     readonly_fields = ("number",)
     date_hierarchy = "call_time"
     ordering = ("-call_time",)
-    inlines = [AlertPersonInline, AlertHistoryInline]
+    inlines = [AlertHistoryInline]
     actions = ["imprimer_selection"]
 
     def colored_status(self, obj):

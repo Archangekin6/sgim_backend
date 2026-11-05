@@ -4,9 +4,8 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from centers.models import Center
-from vessels.models import Vessel
 from partners.models import Partner
-from references.models import AlertSource, IncidentCategory, Priority, Severity
+from references.models import AlertSource, IncidentCategory, Priority
 
 
 def generate_alert_number(center_code: str) -> str:
@@ -38,12 +37,9 @@ class Alert(models.Model):
     channel = models.ForeignKey(AlertSource, on_delete=models.PROTECT, related_name="alerts")
     alert_type = models.ForeignKey(IncidentCategory, on_delete=models.PROTECT, related_name="alerts")
     priority = models.ForeignKey(Priority, on_delete=models.SET_NULL, null=True, blank=True, related_name="alerts")
-    severity = models.ForeignKey(Severity, on_delete=models.SET_NULL, null=True, blank=True, related_name="alerts")
 
-    vessel = models.ForeignKey(Vessel, on_delete=models.SET_NULL, null=True, blank=True, related_name="alerts")
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    position_text = models.CharField(max_length=200, blank=True)
 
     description = models.TextField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
@@ -91,15 +87,3 @@ class AlertHistory(models.Model):
 
     def __str__(self):
         return f"{self.alert.number}: {self.old_status} -> {self.new_status}"
-
-
-class AlertPerson(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name="involved_people")
-    name = models.CharField(max_length=150, blank=True)
-    nationality = models.CharField(max_length=100, blank=True)
-    is_victim = models.BooleanField(default=False)
-    status_note = models.CharField(max_length=255, blank=True)
-
-    def __str__(self):
-        return self.name or f"Personne #{self.pk}"
