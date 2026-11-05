@@ -42,6 +42,36 @@ class DailyReportViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filterset_fields = ["center", "team", "is_validated"]
 
+    def get_permissions(self):
+        if self.action == "validate":
+            return [_IsTeamLeaderOrAdmin()]
+        if self.action == "destroy":
+            return [IsAdminTier()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_admin_tier:
+            return qs
+        # Chef de quart : voit uniquement les rapports de son quart et son centre
+        if user.is_team_leader:
+            return qs.filter(center=user.center, team=user.team) if (user.team and user.center) else qs.none()
+        # Opérateur : voit les rapports de son centre
+        return qs.filter(center=user.center) if user.center else qs.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        # Le chef de quart ne peut créer que pour son propre quart/centre
+        if user.is_team_leader:
+            serializer.save(
+                created_by=user,
+                center=user.center,
+                team=user.team,
+            )
+        else:
+            serializer.save(created_by=user)
+
     @extend_schema(
         summary="Valider un rapport journalier",
         description="Marque le rapport comme validé et envoie un e-mail à la hiérarchie.",
@@ -51,8 +81,17 @@ class DailyReportViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=["post"])
     def validate(self, request, pk=None):
-        """Validation par le chef de quart -> déclenche l'envoi email (§6 spec v2)."""
+        """Validation par le chef de quart -> déclenche l'envoi email."""
         report = self.get_object()
+
+        # Un chef de quart ne peut valider que les rapports de son propre quart
+        user = request.user
+        if user.is_team_leader and (report.team != user.team or report.center != user.center):
+            return Response(
+                {"detail": "Vous ne pouvez valider que les rapports de votre quart."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         report.is_validated = True
         report.validated_by = request.user
         report.validated_at = timezone.now()
