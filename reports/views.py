@@ -1,10 +1,11 @@
 from django.core.mail import send_mail
+from django.core.mail import send_mail
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -12,6 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from alerts.models import Alert
 from alerts.filters import AlertFilter
+from accounts.permissions import IsAdminTier, IsTeamLeader
 from sar.models import MeansEngagement
 
 from drf_spectacular.types import OpenApiTypes
@@ -22,6 +24,16 @@ from drf_spectacular.utils import (
 from .exports import build_alert_pdf, build_alerts_excel, build_daily_report_pdf
 from .models import DailyReport
 from .serializers import DailyReportSerializer
+
+
+class _IsTeamLeaderOrAdmin(BasePermission):
+    """Chef de quart ou admin — utilisé pour l'action validate et destroy."""
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user and user.is_authenticated and
+            (getattr(user, 'is_team_leader', False) or getattr(user, 'is_admin_tier', False))
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

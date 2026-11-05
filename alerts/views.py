@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers, viewsets, status as http_status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, SAFE_METHODS, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -65,19 +65,18 @@ class AlertViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """
-        - Lecture seule : opérateurs, chefs de quart, admins
-        - Écriture (create/update/delete/transmit/change_status) : opérateurs et admins uniquement
+        - Lecture seule : tous les authentifiés (opérateurs, chefs de quart, admins)
+        - Écriture : opérateurs et admins uniquement (refus pour TEAM_LEADER)
         """
-        user = self.request.user
         if self.request.method in SAFE_METHODS:
             return [IsAuthenticated()]
-        # Chef de quart : lecture seule — refus sur toute écriture
-        if hasattr(user, 'is_team_leader') and user.is_authenticated and user.is_team_leader:
-            from rest_framework.permissions import BasePermission
-            class Deny(BasePermission):
+        # Bloquer l'écriture pour les chefs de quart
+        user = self.request.user
+        if user and user.is_authenticated and getattr(user, 'is_team_leader', False):
+            class DenyWrite(BasePermission):
                 def has_permission(self, request, view):
                     return False
-            return [Deny()]
+            return [DenyWrite()]
         return [IsAuthenticated()]
 
     def get_serializer_class(self):
