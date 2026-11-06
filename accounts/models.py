@@ -8,9 +8,10 @@ class User(AbstractUser):
     first_name = models.CharField(max_length=150, blank=False)  # rendu obligatoire
     last_name = models.CharField(max_length=150, blank=False)   # rendu obligatoire
     class Role(models.TextChoices):
-        SUPERADMIN = "SUPERADMIN", "Super Administrateur"
-        ADMIN = "ADMIN", "Administrateur"
-        OPERATOR = "OPERATOR", "Opérateur"
+        SUPERADMIN  = "SUPERADMIN",  "Super Administrateur"
+        ADMIN       = "ADMIN",       "Administrateur"
+        TEAM_LEADER = "TEAM_LEADER", "Chef de quart"
+        OPERATOR    = "OPERATOR",    "Opérateur"
 
     class Team(models.TextChoices):
         CAR1 = "CAR1", "Car 1 (Abidjan)"
@@ -32,6 +33,10 @@ class User(AbstractUser):
     @property
     def is_admin_tier(self):
         return self.role in (self.Role.ADMIN, self.Role.SUPERADMIN) or self.is_superuser
+
+    @property
+    def is_team_leader(self):
+        return self.role == self.Role.TEAM_LEADER
 
     def save(self, *args, **kwargs):
         if self.role == self.Role.SUPERADMIN:

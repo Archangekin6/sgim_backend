@@ -18,9 +18,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
+        # S'assurer que le compte est actif par défaut
+        validated_data.setdefault("is_active", True)
         user = User(**validated_data)
         if password:
             user.set_password(password)
+        else:
+            user.set_unusable_password()
         user.save()
         return user
 
