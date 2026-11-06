@@ -18,8 +18,8 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
-        # S'assurer que le compte est actif par défaut
-        validated_data.setdefault("is_active", True)
+        # Forcer is_active=True — un compte créé est toujours actif par défaut
+        validated_data["is_active"] = True
         user = User(**validated_data)
         if password:
             user.set_password(password)

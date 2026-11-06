@@ -31,11 +31,13 @@ from .serializers import (
 
 class UserViewSet(viewsets.ModelViewSet):
     """Gestion des comptes - réservée au Super Administrateur."""
-    queryset = User.objects.select_related("center").all()
+    queryset = User.objects.select_related("center").order_by("-date_joined")
     serializer_class = UserSerializer
     permission_classes = [IsSuperAdmin]
     filterset_fields = ["role", "team", "center", "is_active"]
     search_fields = ["username", "first_name", "last_name", "email"]
+    ordering_fields = ["date_joined", "last_name", "role", "is_active"]
+    ordering = ["-date_joined"]  # tri par défaut : plus récent en premier
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def me(self, request):
