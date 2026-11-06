@@ -6,6 +6,13 @@ from . import models, serializers
 
 _WRITE_NOTE = "⚠️ Réservé aux administrateurs (ADMIN / SUPERADMIN)."
 _READ_NOTE = "Accessible à tout utilisateur authentifié. Ajouter `?include_inactive=true` pour inclure les entrées désactivées."
+_CHANNEL_NOTE = (
+    "**Canal de réception d'une alerte** (ex : VHF, Téléphone, Email, WhatsApp, OVH...).\n\n"
+    "Cet endpoint alimente le menu déroulant `channel` du formulaire « Nouvelle Alerte ». "
+    "Envoyer l'`id` (UUID) de l'entrée choisie dans le champ `channel` lors de la création.\n\n"
+    "Un administrateur peut ajouter un nouveau canal via `POST /api/references/alert-sources/`.\n\n"
+    + _READ_NOTE
+)
 
 
 class ReferenceViewSetBase(viewsets.ModelViewSet):
@@ -27,12 +34,12 @@ class ReferenceViewSetBase(viewsets.ModelViewSet):
         return qs
 
 
-def _schema(label: str, plural: str):
+def _schema(label: str, plural: str, list_note: str = None):
     """Génère les annotations extend_schema_view pour un ViewSet de référence."""
     return extend_schema_view(
         list=extend_schema(
             summary=f"Lister les {plural}",
-            description=_READ_NOTE,
+            description=list_note or _READ_NOTE,
             tags=["Références"],
         ),
         retrieve=extend_schema(
@@ -62,7 +69,7 @@ def _schema(label: str, plural: str):
     )
 
 
-@_schema("source d'alerte", "sources d'alerte")
+@_schema("source d'alerte", "sources d'alerte", list_note=_CHANNEL_NOTE)
 class AlertSourceViewSet(ReferenceViewSetBase):
     queryset = models.AlertSource.objects.all()
     serializer_class = serializers.AlertSourceSerializer

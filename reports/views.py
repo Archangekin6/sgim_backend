@@ -77,30 +77,41 @@ class DailyReportViewSet(viewsets.ModelViewSet):
         center = user.center
         team = user.team
 
-        # Calcul automatique des compteurs sur les dernières 24h pour ce centre/quart
+        if not center:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                "center": "Aucun centre associé à ce compte. Contactez un administrateur."
+            })
+
+        # Calcul automatique des compteurs sur les dernières 24h pour ce centre
         from django.utils import timezone
         from alerts.models import Alert
         since = timezone.now() - timezone.timedelta(hours=24)
 
-        # Alertes créées par des agents de ce centre dans les dernières 24h
         alerts_count = Alert.objects.filter(
             center=center,
             created_at__gte=since,
         ).count()
 
-        # Coordinations = alertes transmises à un partenaire sur la même période
         coordinations_count = Alert.objects.filter(
             center=center,
             status=Alert.Status.TRANSMITTED,
             notified_at__gte=since,
         ).count()
 
-        serializer.save(
-            created_by=user,
+        # Créer directement en contournant les read_only_fields du serializer
+        from .models import DailyReport
+        report_date = serializer.validated_data.get("report_date")
+        summary = serializer.validated_data.get("summary", "")
+
+        DailyReport.objects.create(
             center=center,
-            team=team,
+            team=team or "",
+            report_date=report_date,
+            summary=summary,
             alerts_count=alerts_count,
             coordinations_count=coordinations_count,
+            created_by=user,
         )
 
     @extend_schema(
