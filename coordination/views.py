@@ -77,21 +77,28 @@ class CoordinationView(APIView):
                 status=403,
             )
 
-        # Alertes actives (tout sauf CLOSED)
-        active_statuses = [Alert.Status.NEW, Alert.Status.QUALIFIED, Alert.Status.TRANSMITTED]
-        alerts_qs = (
-            Alert.objects
-            .select_related("alert_type", "center", "notified_partner")
-            .filter(status__in=active_statuses)
-        )
-        # Les opérateurs ne voient que leur centre
-        if not user.is_admin_tier:
-            alerts_qs = alerts_qs.filter(center_id=user.center_id) if user.center_id else alerts_qs.none()
+        try:
+            # Alertes actives (tout sauf CLOSED)
+            active_statuses = [Alert.Status.NEW, Alert.Status.QUALIFIED, Alert.Status.TRANSMITTED]
+            alerts_qs = (
+                Alert.objects
+                .select_related("alert_type", "center", "notified_partner")
+                .filter(status__in=active_statuses)
+            )
+            # Les opérateurs ne voient que leur centre
+            if not user.is_admin_tier:
+                alerts_qs = alerts_qs.filter(center_id=user.center_id) if user.center_id else alerts_qs.none()
 
-        # Partenaires actifs
-        partners_qs = Partner.objects.select_related("partner_type").filter(is_active=True)
+            # Partenaires actifs
+            partners_qs = Partner.objects.select_related("partner_type").filter(is_active=True)
 
-        return Response({
-            "active_alerts": ActiveAlertSerializer(alerts_qs, many=True).data,
-            "partners": CoordinationPartnerSerializer(partners_qs, many=True).data,
-        })
+            return Response({
+                "active_alerts": ActiveAlertSerializer(alerts_qs, many=True).data,
+                "partners": CoordinationPartnerSerializer(partners_qs, many=True).data,
+            })
+        except Exception as exc:
+            import traceback
+            return Response(
+                {"detail": str(exc), "trace": traceback.format_exc()},
+                status=500,
+            )
