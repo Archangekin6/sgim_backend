@@ -11,13 +11,8 @@ Canal           : {{ alert.channel }}
 Centre          : {{ alert.center }}
 Date / heure    : {{ alert.call_time|date:"d/m/Y H:i" }}
 Priorité        : {{ alert.priority|default:"—" }}
-Sévérité        : {{ alert.severity|default:"—" }}
-
-LOCALISATION
-Position        : {{ alert.position_text|default:"—" }}
-{% if alert.latitude and alert.longitude %}Coordonnées     : {{ alert.latitude }}, {{ alert.longitude }}{% endif %}
-Navire          : {{ alert.vessel|default:"—" }}
-
+{% if alert.latitude and alert.longitude %}Coordonnées     : {{ alert.latitude }}, {{ alert.longitude }}
+{% endif %}
 DESCRIPTION
 {{ alert.description }}
 

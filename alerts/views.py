@@ -155,19 +155,20 @@ class AlertViewSet(viewsets.ModelViewSet):
         )
 
         # ── Envoi email au partenaire ─────────────────────────────────────
+        email_warning = None
         if partner.email:
-            from django.template.loader import render_to_string
-            ctx = {
-                "alert": alert,
-                "partner": partner,
-                "transmitted_at": alert.notified_at,
-                "operator": request.user.get_full_name() or request.user.username,
-                "comment": comment,
-            }
-            subject = render_to_string("alerts/email_transmit_subject.txt", ctx).strip()
-            body = render_to_string("alerts/email_transmit_body.txt", ctx)
             try:
+                from django.template.loader import render_to_string
                 from django.core.mail import send_mail
+                ctx = {
+                    "alert": alert,
+                    "partner": partner,
+                    "transmitted_at": alert.notified_at,
+                    "operator": request.user.get_full_name() or request.user.username,
+                    "comment": comment,
+                }
+                subject = render_to_string("alerts/email_transmit_subject.txt", ctx).strip()
+                body = render_to_string("alerts/email_transmit_body.txt", ctx)
                 send_mail(
                     subject=subject,
                     message=body,
@@ -176,15 +177,14 @@ class AlertViewSet(viewsets.ModelViewSet):
                     fail_silently=False,
                 )
             except Exception as exc:
-                # L'alerte est déjà transmise en base — on ne bloque pas la réponse,
-                # mais on informe le frontend que l'email a échoué.
-                alert = self.get_queryset().get(pk=alert.pk)
-                data = AlertDetailSerializer(alert).data
-                data["email_warning"] = f"Alerte transmise, mais l'email n'a pas pu être envoyé : {exc}"
-                return Response(data, status=http_status.HTTP_200_OK)
+                import traceback
+                email_warning = f"Alerte transmise, mais l'email n'a pas pu être envoyé : {exc}"
 
         alert = self.get_queryset().get(pk=alert.pk)
-        return Response(AlertDetailSerializer(alert).data)
+        data = AlertDetailSerializer(alert).data
+        if email_warning:
+            data["email_warning"] = email_warning
+        return Response(data, status=http_status.HTTP_200_OK)
 
 
 class HeatmapView(APIView):
